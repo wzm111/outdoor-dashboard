@@ -34,16 +34,26 @@ python3 -m http.server 8080
 
 点「连接」即可。
 
-## 部署到 GitHub Pages
+## 部署到 GitHub Pages（已上线）
 
-本仓库即为「只放前端」的独立公开仓库（前端无任何密钥，密钥仅存用户浏览器 localStorage）。所有文件在仓库**根目录**。
+本目录的前端**已部署**到独立公开仓库，线上地址：
 
-1. 仓库 Settings → Pages：
-   - Source 选 `Deploy from a branch`，分支选 `main`，目录选 `/ (root)`。
-2. 等待约 1 分钟，访问 `https://wzm111.github.io/outdoor-dashboard/`。
-3. Edge Function 已设 `Access-Control-Allow-Origin: *`，跨域请求无需额外配置。
+**https://wzm111.github.io/outdoor-dashboard/**
 
-> 源码维护在私有主仓库 `outdoor-assistant` 的 `web/` 目录；本公开仓库仅用于 Pages 托管，更新时从主仓库同步 `web/` 内容过来即可。
+部署架构（因主仓库 `outdoor-assistant` 为私有、免费账号私有仓库无法开 Pages）：
+
+- 源码维护在**本私有主仓库**的 `web/` 目录（唯一正确源）。
+- 一个独立**公开仓库** `wzm111/outdoor-dashboard` 仅托管前端 6 文件（无任何密钥），开 GitHub Pages（main 分支 / 根目录）。
+- 改完本目录代码后，运行同步脚本把改动推到公开仓库、触发 Pages 重建：
+
+```bash
+bash web/sync-to-pages.sh            # 同步并推送
+bash web/sync-to-pages.sh --dry-run  # 只看会同步什么，不推送
+```
+
+脚本会自动 clone 公开仓库、覆盖前端文件、**推送前扫描密钥**、仅在有改动时提交推送（带网络重试），跑完清理临时目录。前置：`gh` CLI 已登录（走 HTTPS token，无需 SSH）。
+
+> Edge Function 已设 `Access-Control-Allow-Origin: *`，跨域无需额外配置。
 
 ## 应用图标（可选）
 
