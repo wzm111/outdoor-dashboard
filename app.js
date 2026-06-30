@@ -75,12 +75,29 @@ function apiBase(url) {
   return b;
 }
 
+/** 带超时的 fetch：超时主动 abort，避免请求无限 pending 导致页面永久“加载中”。 */
+async function fetchWithTimeout(url, options, timeoutMs, label) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new Error(`${label}超时（${Math.round(timeoutMs / 1000)}s）。请检查网络或 API 地址是否可达。`);
+    }
+    // 跨域/网络层失败时浏览器只给 "Failed to fetch"，补充可能原因
+    throw new Error(`${label}失败：${err && err.message ? err.message : err}（可能是网络不通或 CORS）`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchToken(apiUrl, secret) {
-  const res = await fetch(`${apiBase(apiUrl)}/auth/token`, {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({ secret }),
-  });
+  }, 15000, '认证');
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`认证失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
@@ -91,7 +108,7 @@ async function fetchToken(apiUrl, secret) {
 }
 
 async function fetchExport(apiUrl, token) {
-  const res = await fetch(`${apiBase(apiUrl)}/sync`, {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/sync`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -99,7 +116,7 @@ async function fetchExport(apiUrl, token) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({ action: 'export' }),
-  });
+  }, 30000, '拉取数据');
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`拉取数据失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);

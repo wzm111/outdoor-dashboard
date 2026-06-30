@@ -5,7 +5,8 @@
  * - API 请求（/auth/token、/sync）一律走网络，绝不缓存（含密钥/JWT，且数据要新鲜）。
  *   离线时的数据回退由 app.js 用 localStorage 快照处理，不在 SW 层缓存响应。
  */
-const CACHE = 'outdoor-dashboard-v1';
+const CACHE = 'outdoor-dashboard-v2';
+// 核心外壳：必须全部缓存成功（addAll 原子操作），缺一不可离线运行
 const SHELL = [
   './',
   './index.html',
@@ -13,10 +14,20 @@ const SHELL = [
   './styles.css',
   './manifest.json',
 ];
+// 可选资源：尽力缓存，单个失败不阻断 SW 安装
+const OPTIONAL = [
+  './icon-192.png',
+  './icon-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) =>
+      cache.addAll(SHELL).then(() =>
+        // 图标尽力缓存：任一失败也不让整个安装失败
+        Promise.all(OPTIONAL.map((u) => cache.add(u).catch(() => {})))
+      )
+    ).then(() => self.skipWaiting())
   );
 });
 
