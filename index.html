@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1419" />
+  <title>户外助手 · 看板</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏔️</text></svg>" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- 登录 / 配置面板 -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <h1>🏔️ 户外助手看板</h1>
+      <p class="auth-sub">输入访问密钥连接你的 Supabase 数据</p>
+      <label>
+        API 地址
+        <input id="api-url" type="url" autocomplete="off"
+               placeholder="https://xxx.supabase.co/functions/v1" />
+      </label>
+      <label>
+        访问密钥 (api_secret)
+        <input id="api-secret" type="password" autocomplete="off"
+               placeholder="你的长期 service 密钥" />
+      </label>
+      <label class="remember">
+        <input id="remember" type="checkbox" checked />
+        在本浏览器记住密钥（仅存本地 localStorage）
+      </label>
+      <button id="connect-btn" type="button">连接</button>
+      <p id="auth-error" class="auth-error" hidden></p>
+      <p class="auth-note">
+        🔒 密钥只保存在你的浏览器本地，绝不上传或写入代码仓库。
+        清除浏览器数据即可移除。
+      </p>
+    </div>
+  </div>
+
+  <!-- 主看板 -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand">🏔️ 户外助手</div>
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-view="overview">总览</button>
+        <button class="tab" data-view="activities">活动</button>
+        <button class="tab" data-view="body">身体趋势</button>
+        <button class="tab" data-view="gear">装备</button>
+        <button class="tab" data-view="routes">路线</button>
+        <button class="tab" data-view="plans">计划</button>
+      </nav>
+      <div class="topbar-actions">
+        <span id="sync-status" class="sync-status"></span>
+        <button id="refresh-btn" class="icon-btn" title="刷新">↻</button>
+        <button id="logout-btn" class="icon-btn" title="断开 / 清除密钥">⏏</button>
+      </div>
+    </header>
+
+    <main id="views" class="views">
+      <section class="view" data-view="overview"></section>
+      <section class="view" data-view="activities" hidden></section>
+      <section class="view" data-view="body" hidden></section>
+      <section class="view" data-view="gear" hidden></section>
+      <section class="view" data-view="routes" hidden></section>
+      <section class="view" data-view="plans" hidden></section>
+    </main>
+
+    <footer class="footer">
+      <span id="data-meta"></span>
+    </footer>
+  </div>
+
+  <div id="loading" class="loading" hidden>
+    <div class="spinner"></div>
+    <span>加载数据中…</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

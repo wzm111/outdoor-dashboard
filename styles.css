@@ -1,0 +1,243 @@
+/* 户外助手看板样式 — 纯手写，无框架。深色友好。 */
+:root {
+  --bg: #0f1419;
+  --bg-elev: #1a2029;
+  --bg-card: #1e2530;
+  --border: #2a3340;
+  --text: #e6edf3;
+  --text-dim: #9aa7b4;
+  --accent: #4fb477;
+  --accent-dim: #2f6f4a;
+  --warn: #e0a458;
+  --danger: #e06c75;
+  --blue: #5aa9e6;
+  --radius: 12px;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 登录面板 ---------- */
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.auth-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 32px;
+  width: 100%;
+  max-width: 420px;
+}
+.auth-card h1 { font-size: 22px; margin-bottom: 6px; }
+.auth-sub { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
+.auth-card label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+.auth-card input[type="url"],
+.auth-card input[type="password"] {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+.auth-card input:focus { outline: none; border-color: var(--accent); }
+.remember {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.remember input { width: auto; margin: 0; }
+.auth-card button {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent);
+  color: #06210f;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.auth-card button:hover { background: #5cc488; }
+.auth-card button:disabled { opacity: 0.6; cursor: wait; }
+.auth-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin-top: 14px;
+  padding: 10px;
+  background: rgba(224, 108, 117, 0.1);
+  border-radius: 8px;
+}
+.auth-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 20px;
+  line-height: 1.6;
+}
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-wrap: wrap;
+}
+.brand { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+.tab {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab:hover { background: var(--bg-card); color: var(--text); }
+.tab.active { background: var(--accent-dim); color: var(--text); }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.sync-status { font-size: 12px; color: var(--text-dim); }
+.icon-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--accent); }
+
+/* ---------- 视图区 ---------- */
+.views { padding: 20px; max-width: 1100px; margin: 0 auto; }
+.view { animation: fade 0.2s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+/* 统计卡片网格 */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.stat-card .label { font-size: 13px; color: var(--text-dim); }
+.stat-card .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+.stat-card .unit { font-size: 14px; color: var(--text-dim); font-weight: 400; }
+
+/* 区块标题 */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 24px 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 卡片 */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 14px;
+}
+
+/* 表格 */
+.table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 10px 14px; text-align: left; white-space: nowrap; }
+th { background: var(--bg-elev); color: var(--text-dim); font-weight: 600; font-size: 12px; }
+tr { border-top: 1px solid var(--border); }
+tbody tr:hover { background: var(--bg-elev); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 徽标 / 标签 */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.badge.hard { color: var(--danger); border-color: var(--danger); }
+.badge.moderate { color: var(--warn); border-color: var(--warn); }
+.badge.easy { color: var(--accent); border-color: var(--accent); }
+
+/* 图表 */
+.chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; }
+.chart-card h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 12px; font-weight: 600; }
+canvas { width: 100%; display: block; }
+
+.empty { color: var(--text-dim); font-size: 14px; padding: 20px; text-align: center; }
+
+/* 页脚 */
+.footer { padding: 16px 20px; text-align: center; color: var(--text-dim); font-size: 12px; }
+
+/* 加载遮罩 */
+.loading {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 20, 25, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text);
+  z-index: 100;
+}
+.spinner {
+  width: 22px; height: 22px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+  .views { padding: 14px; }
+  .stat-card .value { font-size: 24px; }
+  .brand { font-size: 15px; }
+}
