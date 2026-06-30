@@ -29,6 +29,7 @@ python3 -m http.server 8080
 ```
 
 首屏填入：
+
 - **API 地址**：`https://<你的项目>.supabase.co/functions/v1`（已预填默认值）
 - **访问密钥**：你的 `api_secret`（与 `~/.outdoor-assistant/config.json` 里的一致）
 
@@ -38,7 +39,7 @@ python3 -m http.server 8080
 
 本目录的前端**已部署**到独立公开仓库，线上地址：
 
-**https://wzm111.github.io/outdoor-dashboard/**
+**<https://wzm111.github.io/outdoor-dashboard/>**
 
 部署架构（因主仓库 `outdoor-assistant` 为私有、免费账号私有仓库无法开 Pages）：
 
@@ -55,15 +56,13 @@ bash web/sync-to-pages.sh --dry-run  # 只看会同步什么，不推送
 
 > Edge Function 已设 `Access-Control-Allow-Origin: *`，跨域无需额外配置。
 
-## 应用图标（可选）
+## 应用图标
 
-`manifest.json` 引用了 `icon-192.png` 和 `icon-512.png` 用于 PWA 安装图标。**没有它们应用照常运行**（标签页用内联 SVG ⛰️ 图标）。如需更规范的安装图标，放两张对应尺寸的 PNG 到 `web/` 即可，例如用 ImageMagick：
+`manifest.json` 引用 `icon-192.png` / `icon-512.png` 作为 PWA 安装图标，仓库已附带（深墨绿圆角底 + 翠绿雪山峰，与页面主色一致）。它们由 `web/` 下用 Python 标准库（`zlib`+`struct` 手写最小 PNG 编码器）生成，无需 ImageMagick/PIL。
 
-```bash
-# 任意一张方形图片生成两个尺寸
-magick source.png -resize 192x192 web/icon-192.png
-magick source.png -resize 512x512 web/icon-512.png
-```
+要换图标，放两张对应尺寸的方形 PNG 覆盖即可（有 ImageMagick 时 `magick source.png -resize 192x192 web/icon-192.png`），然后跑同步脚本。
+
+> ⚠️ **改任何前端文件后，记得 bump `service-worker.js` 顶部的 `CACHE` 版本号**（如 `outdoor-dashboard-v2` → `v3`）。否则旧版外壳会一直从 Service Worker 缓存返回，用户看到的还是旧页面（缓存清理逻辑只删“非当前版本”的缓存，不会清掉同名缓存自身）。
 
 ## 视图说明
 
