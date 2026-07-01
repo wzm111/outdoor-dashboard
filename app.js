@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v10-2026-07-01';
+const APP_VERSION = 'v11-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -812,6 +812,9 @@ function renderGear() {
       const actions = el('div', { class: 'gear-card-actions' });
       actions.appendChild(el('button', { class: 'btn-sm', 'data-action': 'detail' }, '详情'));
       actions.appendChild(el('button', { class: 'btn-sm btn-primary', 'data-action': 'update' }, '更新'));
+      const isRetired = g.condition === 'retired';
+      const retireBtn = el('button', { class: 'btn-sm' + (isRetired ? ' btn-primary' : ''), 'data-action': isRetired ? 'restore' : 'retire' }, isRetired ? '↩ 恢复' : '🗑 淘汰');
+      actions.appendChild(retireBtn);
 
       card.appendChild(main);
       card.appendChild(actions);
@@ -820,6 +823,20 @@ function renderGear() {
       // 事件绑定
       $('.btn-sm[data-action="detail"]', card).addEventListener('click', () => openGearDetail(g));
       $('.btn-sm[data-action="update"]', card).addEventListener('click', () => openGearUpdate(g));
+      retireBtn.addEventListener('click', async () => {
+        const nextCondition = isRetired ? 'good' : 'retired';
+        retireBtn.disabled = true;
+        retireBtn.textContent = isRetired ? '恢复中…' : '淘汰中…';
+        try {
+          await fetchSaveGear(state.apiUrl, state.token, g.slug, { ...g, condition: nextCondition });
+          toast(isRetired ? '已恢复装备' : '已淘汰装备', 'success');
+          await loadAndRender(true);
+        } catch (err) {
+          toast(err.message || '操作失败', 'error');
+          retireBtn.disabled = false;
+          retireBtn.textContent = isRetired ? '↩ 恢复' : '🗑 淘汰';
+        }
+      });
     }
 
     header.addEventListener('click', () => {
