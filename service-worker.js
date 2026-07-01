@@ -1,11 +1,12 @@
 /* 户外助手看板 Service Worker
  *
  * 策略：
- * - 静态外壳（HTML/CSS/JS/manifest）走 cache-first，离线可打开应用。
+ * - 静态外壳（HTML/CSS/JS/manifest）走 **network-first**：优先拉网络最新版并写回缓存，
+ *   只有网络失败（离线）才回退缓存。彻底避免旧外壳被 cache-first 钉死导致用户看到旧页面。
  * - API 请求（/auth/token、/sync）一律走网络，绝不缓存（含密钥/JWT，且数据要新鲜）。
  *   离线时的数据回退由 app.js 用 localStorage 快照处理，不在 SW 层缓存响应。
  */
-const CACHE = 'outdoor-dashboard-v2';
+const CACHE = 'outdoor-dashboard-v3';
 // 核心外壳：必须全部缓存成功（addAll 原子操作），缺一不可离线运行
 const SHELL = [
   './',
@@ -51,17 +52,15 @@ self.addEventListener('fetch', (event) => {
     return; // 交给浏览器默认网络处理
   }
 
-  // 静态外壳：cache-first，回源后写回缓存
+  // 静态外壳：network-first —— 优先网络最新版并写回缓存，网络失败才回退缓存。
+  // 这样每次改前端文件后，用户一联网打开就拿到新版，不会被旧缓存钉死。
   event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
-        if (res && res.ok && url.origin === self.location.origin) {
-          const clone = res.clone();
-          caches.open(CACHE).then((cache) => cache.put(req, clone));
-        }
-        return res;
-      }).catch(() => cached);
-    })
+    fetch(req).then((res) => {
+      if (res && res.ok && url.origin === self.location.origin) {
+        const clone = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, clone));
+      }
+      return res;
+    }).catch(() => caches.match(req)) // 离线兜底：回退到缓存的外壳
   );
 });

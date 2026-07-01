@@ -5,6 +5,10 @@
  */
 'use strict';
 
+// 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
+const APP_VERSION = 'v3-2026-07-01';
+window.__APP_VERSION = APP_VERSION;
+
 const LS_KEY = 'outdoor-dashboard-config';
 const CACHE_KEY = 'outdoor-dashboard-snapshot';
 const DEFAULT_API = 'https://oxjqquwbnvhgulpkboli.supabase.co/functions/v1';
@@ -164,8 +168,7 @@ async function connect(apiUrl, secret, remember) {
     if (remember) saveConfig(apiUrl, secret);
     else clearConfig();
     await loadAndRender();
-    $('#auth-screen').hidden = true;
-    $('#app').hidden = false;
+    // UI 切换已收进 loadAndRender 的 showDashboard()，此处无需重复
   } catch (err) {
     showAuthError(err.message || String(err));
   } finally {
@@ -175,6 +178,14 @@ async function connect(apiUrl, secret, remember) {
 }
 
 // ---------- 加载 + 渲染 ----------
+
+/** 数据上屏后原子切换到看板：隐藏登录框、显示看板、关闭加载浮层。
+ *  只要 render 成功就必须调用，避免出现"数据出来了但登录框/spinner 还盖着"。 */
+function showDashboard() {
+  $('#auth-screen').hidden = true;
+  $('#app').hidden = false;
+  $('#loading').hidden = true;
+}
 
 async function loadAndRender(isRefresh = false) {
   const loading = $('#loading');
@@ -193,6 +204,7 @@ async function loadAndRender(isRefresh = false) {
     };
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch {}
     renderAll();
+    showDashboard();
     $('#sync-status').textContent = '✓ 已同步';
   } catch (err) {
     // 失败时尝试用缓存快照（离线/PWA）
@@ -200,6 +212,7 @@ async function loadAndRender(isRefresh = false) {
     if (cached) {
       state.data = cached;
       renderAll();
+      showDashboard();
       $('#sync-status').textContent = '⚠ 离线快照';
     } else if (!isRefresh) {
       throw err;
