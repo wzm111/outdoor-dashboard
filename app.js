@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v15-2026-07-01';
+const APP_VERSION = 'v16-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -127,7 +127,8 @@ function showModal(title, contentNode, buttons = []) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
   for (const b of buttons) {
-    // 底部按钮默认点击关闭弹窗；调用方可额外绑定自己的逻辑
+    // 底部按钮默认点击关闭弹窗；带 data-no-autoclose 的按钮由调用方自行控制关闭时机
+    if (b.getAttribute && b.getAttribute('data-no-autoclose') != null) continue;
     b.addEventListener('click', close);
   }
 
@@ -176,6 +177,82 @@ function activitiesUsingGear(slug) {
     .filter((a) => gearSlugsOf(a).includes(slug))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
+
+// ---------- 活动 gear_used 写回 ----------
+
+/** 把编辑后的 slug 列表序列化成 frontmatter 里的 gear_used YAML 块。
+ *  空列表 → `gear_used: []`；非空 → 多行 `  - slug`。不含末尾换行。 */
+function serializeGearUsedBlock(slugs) {
+  if (!slugs || !slugs.length) return 'gear_used: []';
+  return 'gear_used:\n' + slugs.map((s) => `  - ${s}`).join('\n');
+}
+
+/** 只替换 raw_markdown 里 frontmatter（首个 ---...---）内的 gear_used 块，正文散文原样保留。
+ *  - 兼容原块是多行列表（gear_used:\n  - x\n  - y）或空数组（gear_used: []）。
+ *  - frontmatter 里没有 gear_used 键时，在 frontmatter 末尾追加。
+ *  - 整段 raw 没有 frontmatter 围栏时，返回原文不动（无法安全定位，交由调用方决定）。
+ *  返回 { text, changed }。 */
+function replaceGearUsedInMarkdown(raw, slugs) {
+  const src = String(raw == null ? '' : raw);
+  const block = serializeGearUsedBlock(slugs);
+  // 定位首个 frontmatter 围栏：^---\n ... \n---(\n|$)
+  const fm = src.match(/^(---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))/);
+  if (!fm) return { text: src, changed: false };
+  const head = fm[1];
+  let body = fm[2];
+  const tail = fm[3];
+  // 在 frontmatter body 内匹配 gear_used 块：从行首 gear_used: 起，
+  // 吃掉后续所有更深缩进的列表行（  - ...），到下一个顶层键或 body 结束前。
+  const guRe = /^gear_used:[ \t]*(?:\r?\n(?:[ \t]+-.*(?:\r?\n|$))*|\[\s*\].*(?:\r?\n|$)?|.*(?:\r?\n|$))/m;
+  let newBody;
+  if (guRe.test(body)) {
+    newBody = body.replace(guRe, (m) => {
+      // 保留原块尾部的换行数：若原匹配以换行结尾则补一个换行
+      const endsNl = /\r?\n$/.test(m);
+      return block + (endsNl ? '\n' : '');
+    });
+  } else {
+    // frontmatter 里没有 gear_used，追加到 body 末尾
+    newBody = body.replace(/\s*$/, '') + '\n' + block;
+  }
+  const changed = newBody !== body;
+  return { text: head + newBody + tail + src.slice(fm[0].length), changed };
+}
+
+/** 构建写回用的完整活动 data：剔除看板注入的非持久字段，并用编辑后的干净 slug 数组替换 gear_used。 */
+function packActivityData(activity, slugs) {
+  const copy = { ...activity };
+  delete copy._raw_markdown;
+  delete copy._updated_at;
+  delete copy._path;
+  delete copy.slug;
+  copy.gear_used = slugs.slice();
+  return copy;
+}
+
+/** 写回单条活动的 gear_used：走 /sync import 的 activities upsert（onConflict date+route，无需 id）。
+ *  整行覆盖，故必须回传完整 data 和 raw_markdown。 */
+async function fetchSaveActivity(apiUrl, token, payload) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ action: 'import', data: { activities: [payload] } }),
+  }, 15000, '保存活动装备');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`保存失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  const json = await res.json().catch(() => ({}));
+  // import 返回 { activities: { success, count } | { error } }
+  const r = json && (json.activities || (json.results && json.results.activities));
+  if (r && r.error) throw new Error(`保存失败: ${String(r.error).slice(0, 120)}`);
+  return json;
+}
+
 
 // ---------- 装备使用统计 / 磨损·闲置提醒 ----------
 
@@ -302,6 +379,8 @@ function unwrap(row) {
   if ('route' in row && flat.route == null) flat.route = row.route;
   if ('name' in row && flat.name == null) flat.name = row.name;
   if ('plan_type' in row) flat.plan_type = row.plan_type;
+  // 保留原始 Markdown（脚本侧 _unwrap 同名约定）：写回时需回传，且要在其中同步 frontmatter 的 gear_used 块。
+  if ('raw_markdown' in row) flat._raw_markdown = row.raw_markdown;
   return flat;
 }
 
@@ -452,6 +531,42 @@ async function fetchAiGear(apiUrl, token, text, sourceUrl) {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`AI 识别失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+/** AI 解析路线自然语言描述 → 结构化字段（后端 /ai/route，双 AI 取优）。 */
+async function fetchAiRoute(apiUrl, token, text, sourceUrl) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/ai/route`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ text, source_url: sourceUrl }),
+  }, 45000, 'AI 识别路线');
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`AI 识别失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+/** 保存单条路线：PUT /routes/:slug（存在则更新、不存在则插入）。body = { data, raw_markdown? }。 */
+async function fetchSaveRoute(apiUrl, token, slug, payload) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/routes/${encodeURIComponent(slug)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  }, 15000, '保存路线');
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`保存路线失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
   }
   return res.json();
 }
@@ -723,7 +838,8 @@ function feltStars(felt) {
  *  gearMap 可选（slug→装备）；不传时现场构建，保证从装备详情反向进来也能用。 */
 function openActivityGear(activity, gearMap) {
   const map = gearMap || new Map((state.data.gear || []).map((g) => [g.slug, g]));
-  const slugs = gearSlugsOf(activity);
+  // 工作副本：编辑不直接改 activity，保存成功后才写回内存
+  let working = gearSlugsOf(activity);
   const wrap = el('div', {});
 
   // 活动概要（距离/爬升/时长/感受）
@@ -734,51 +850,136 @@ function openActivityGear(activity, gearMap) {
   ].filter(Boolean).join(' · ');
   if (meta) wrap.appendChild(el('div', { class: 'rel-summary' }, meta));
 
-  if (!slugs.length) {
-    wrap.appendChild(el('div', { class: 'empty' }, '本次活动未记录装备'));
-    showModal(`${fmtDate(activity.date)} · ${activity.route || '活动'} 用过的装备`, wrap,
-      [el('button', { class: 'btn' }, '关闭')]);
-    return;
-  }
+  // 可重绘区：装备列表 + 添加下拉 + 合计
+  const editArea = el('div', {});
+  wrap.appendChild(editArea);
 
-  const list = el('div', { class: 'rel-list' });
-  let totalWeight = 0, weighed = 0;
-  for (const slug of slugs) {
-    const g = map.get(slug);
-    if (g && g.weight_g != null && !isNaN(Number(g.weight_g))) {
-      totalWeight += Number(g.weight_g);
-      weighed += 1;
-    }
-    const item = el('div', { class: 'rel-item' + (g ? '' : ' rel-item-missing') });
-    const info = el('div', { class: 'rel-info' });
-    if (g) {
-      info.appendChild(el('div', { class: 'rel-name' }, g.name || g.slug));
-      info.appendChild(el('div', { class: 'rel-brief' },
-        [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category || '未分类')]
-          .filter(Boolean).join(' · ') || '—'));
+  // 保存按钮引用（rebuild 时据是否有改动启用/禁用）
+  let saveBtn = null;
+  const origSlugs = gearSlugsOf(activity);
+  const dirty = () => working.length !== origSlugs.length || working.some((s, i) => s !== origSlugs[i]);
+
+  function rebuild() {
+    editArea.innerHTML = '';
+
+    if (!working.length) {
+      editArea.appendChild(el('div', { class: 'empty' }, '本次活动未记录装备，可在下方添加'));
     } else {
-      info.appendChild(el('div', { class: 'rel-name' }, '未知装备'));
-      info.appendChild(el('div', { class: 'rel-brief' }, slug + '（装备库中未找到）'));
+      const list = el('div', { class: 'rel-list' });
+      let totalWeight = 0, weighed = 0;
+      working.forEach((slug) => {
+        const g = map.get(slug);
+        if (g && g.weight_g != null && !isNaN(Number(g.weight_g))) { totalWeight += Number(g.weight_g); weighed += 1; }
+        const item = el('div', { class: 'rel-item gear-edit-row' + (g ? '' : ' rel-item-missing') });
+        const info = el('div', { class: 'rel-info' });
+        if (g) {
+          info.appendChild(el('div', { class: 'rel-name' }, g.name || g.slug));
+          info.appendChild(el('div', { class: 'rel-brief' },
+            [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category || '未分类')]
+              .filter(Boolean).join(' · ') || '—'));
+        } else {
+          info.appendChild(el('div', { class: 'rel-name' }, '未知装备'));
+          info.appendChild(el('div', { class: 'rel-brief' }, slug + '（装备库中未找到）'));
+        }
+        item.appendChild(info);
+        const actions = el('div', { class: 'gear-edit-actions' });
+        if (g) {
+          const detailBtn = el('button', { class: 'btn-sm' }, '详情');
+          detailBtn.addEventListener('click', () => openGearDetail(g));
+          actions.appendChild(detailBtn);
+        }
+        const rmBtn = el('button', { class: 'btn-sm btn-danger-outline' }, '✕ 移除');
+        rmBtn.addEventListener('click', () => { working = working.filter((s) => s !== slug); rebuild(); });
+        actions.appendChild(rmBtn);
+        item.appendChild(actions);
+        list.appendChild(item);
+      });
+      editArea.appendChild(list);
+
+      const summaryText = weighed
+        ? `本次共 ${working.length} 件，其中 ${weighed} 件有重量，合计约 ${num(totalWeight, 0)} g`
+        : `本次共 ${working.length} 件`;
+      editArea.appendChild(el('div', { class: 'rel-summary rel-summary-total' }, summaryText));
     }
-    item.appendChild(info);
-    if (g) {
-      const btn = el('button', { class: 'btn-sm' }, '详情');
-      btn.addEventListener('click', () => openGearDetail(g));
-      item.appendChild(btn);
+
+    // 添加下拉：装备库在用装备（排除已选、排除已淘汰），按类别分组
+    const addable = (state.data.gear || [])
+      .filter((g) => g.condition !== 'retired' && !working.includes(g.slug));
+    const addRow = el('div', { class: 'gear-add-row' });
+    if (addable.length) {
+      const sel = el('select', { class: 'gear-select' });
+      sel.appendChild(el('option', { value: '' }, '+ 添加装备…'));
+      // 按类别分组
+      const byCat = new Map();
+      addable.forEach((g) => {
+        const c = g.category || '未分类';
+        if (!byCat.has(c)) byCat.set(c, []);
+        byCat.get(c).push(g);
+      });
+      Array.from(byCat.keys()).sort().forEach((cat) => {
+        const og = el('optgroup', { label: categoryLabel(cat) });
+        byCat.get(cat)
+          .sort((a, b) => String(a.name || a.slug).localeCompare(String(b.name || b.slug)))
+          .forEach((g) => og.appendChild(el('option', { value: g.slug },
+            (g.name || g.slug) + (g.weight_g != null ? ` · ${num(g.weight_g, 0)}g` : ''))));
+        sel.appendChild(og);
+      });
+      sel.addEventListener('change', () => {
+        const v = sel.value;
+        if (v && !working.includes(v)) { working = working.concat([v]); rebuild(); }
+      });
+      addRow.appendChild(sel);
+    } else {
+      addRow.appendChild(el('div', { class: 'rel-brief' }, '装备库中已无更多可添加的在用装备'));
     }
-    list.appendChild(item);
+    editArea.appendChild(addRow);
+
+    if (saveBtn) {
+      saveBtn.disabled = !dirty();
+      saveBtn.textContent = dirty() ? '保存' : '未修改';
+    }
   }
-  wrap.appendChild(list);
 
-  // 合计：件数 + 已知重量之和（为负重/磨损分析铺垫）
-  const summaryText = weighed
-    ? `本次共 ${slugs.length} 件，其中 ${weighed} 件有重量，合计约 ${num(totalWeight, 0)} g`
-    : `本次共 ${slugs.length} 件`;
-  wrap.appendChild(el('div', { class: 'rel-summary rel-summary-total' }, summaryText));
+  saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '保存');
+  const closeBtn = el('button', { class: 'btn' }, '关闭');
+  const close = showModal(`${fmtDate(activity.date)} · ${activity.route || '活动'} 的装备`, wrap, [saveBtn, closeBtn]);
+  saveBtn.addEventListener('click', async () => {
+    if (!dirty()) { close(); return; } // 没改动直接关
+    await saveActivityGear();
+  });
 
-  showModal(`${fmtDate(activity.date)} · ${activity.route || '活动'} 用过的装备`, wrap,
-    [el('button', { class: 'btn' }, '关闭')]);
+  async function saveActivityGear() {
+    if (!state.token) { toast('未连接，无法保存', 'error'); return; }
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      const cleanSlugs = working.slice();
+      const data = packActivityData(activity, cleanSlugs);
+      const rawRes = replaceGearUsedInMarkdown(activity._raw_markdown || '', cleanSlugs);
+      const payload = {
+        date: activity.date,
+        route: activity.route,
+        data,
+        raw_markdown: rawRes.text,
+      };
+      await fetchSaveActivity(state.apiUrl, state.token, payload);
+      // 就地更新内存，避免整表重拉
+      activity.gear_used = cleanSlugs.slice();
+      activity._raw_markdown = rawRes.text;
+      toast('已更新本次活动的装备', 'info');
+      close();
+      // 重渲染活动视图（件数徽标随之更新）
+      if (typeof renderActivities === 'function') renderActivities();
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+    }
+  }
+
+  rebuild();
 }
+
 
 function activityTypeGroup(type) {
   const t = String(type || '').toLowerCase();
@@ -1551,7 +1752,13 @@ function renderRoutes() {
     (Number(b.distance_km) || 0) - (Number(a.distance_km) || 0));
   const view = viewEl('routes');
   view.innerHTML = '';
-  view.appendChild(el('div', { class: 'section-title' }, `🗺️ 路线库（${routes.length}）`));
+  // 顶部标题 + AI 添加按钮（空列表时按钮也保留）
+  const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+    el('span', {}, `🗺️ 路线库（${routes.length}）`),
+    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-route-ai' }, '✨ AI 添加')
+  );
+  view.appendChild(headerRow);
+  $('.btn-sm[data-action="add-route-ai"]', headerRow).addEventListener('click', () => openAddRouteByAi());
 
   if (!routes.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无路线'));
@@ -1617,6 +1824,137 @@ function openRouteDetail(r) {
     list.appendChild(li);
   }
   showModal(r.name || r.slug || '路线详情', list, [el('button', { class: 'btn' }, '关闭')]);
+}
+
+/** 生成 URL 安全的路线 slug，支持中英文混排（参照 slugifyGear）。 */
+function slugifyRoute(name) {
+  const raw = String(name || '').trim().toLowerCase();
+  const slug = raw
+    .replace(/[^a-z0-9一-龥]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
+  return slug || 'route-' + Date.now();
+}
+
+/** 把扁平路线对象包成 PUT /routes/:slug 需要的 { data } 结构（剔除注入字段）。 */
+function packRoutePayload(data) {
+  const copy = { ...data };
+  delete copy.slug;
+  delete copy._raw_markdown;
+  delete copy._updated_at;
+  delete copy._path;
+  return { data: copy };
+}
+
+/** 路线字段预览表（保存前确认用）。 */
+function routeFactList(r) {
+  const facts = [
+    ['名称', r.name],
+    ['地点', r.location],
+    ['距离', r.distance_km != null ? num(r.distance_km) + ' km' : null],
+    ['爬升', r.elevation_gain_m != null ? num(r.elevation_gain_m, 0) + ' m' : null],
+    ['下降', r.elevation_loss_m != null ? num(r.elevation_loss_m, 0) + ' m' : null],
+    ['最高海拔', r.max_altitude_m != null ? num(r.max_altitude_m, 0) + ' m' : null],
+    ['难度', r.difficulty],
+    ['预计时长', r.estimated_hours != null ? num(r.estimated_hours) + ' h' : null],
+    ['地形', Array.isArray(r.terrain) ? r.terrain.join('、') : r.terrain],
+    ['最佳季节', Array.isArray(r.best_seasons) ? r.best_seasons.join('、') : r.best_seasons],
+    ['水源', Array.isArray(r.water_sources) ? r.water_sources.join('、') : r.water_sources],
+    ['备注', r.notes],
+  ].filter(([, v]) => v != null && v !== '');
+  const list = el('ul', { class: 'detail-list' });
+  for (const [k, v] of facts) {
+    list.appendChild(el('li', {}, el('strong', {}, k + '：'), document.createTextNode(String(v))));
+  }
+  return list;
+}
+
+/** 渲染 AI 路线解析结果 + slug 输入 + 保存按钮。 */
+function renderRouteAiResult(container, parsed, provider) {
+  container.innerHTML = '';
+  if (!parsed || !parsed.name) {
+    container.appendChild(el('div', { class: 'empty' }, '没有识别到路线名称，请补充更完整的描述（至少给出路线名）。'));
+    return;
+  }
+  const titleText = provider ? `AI 识别结果（${provider === 'moonshot' ? 'Kimi' : 'DeepSeek'}）` : '识别结果';
+  container.appendChild(el('div', { class: 'section-title' }, `${titleText}（确认后保存）`));
+  container.appendChild(routeFactList(parsed));
+
+  // slug 可编辑（默认按名称生成）；若与已有路线重名，保存即为覆盖更新，给出提示。
+  const existing = new Set((state.data.routes || []).map((r) => r.slug));
+  const defSlug = slugifyRoute(parsed.name);
+  const slugInput = el('input', { type: 'text', class: 'gear-select', value: defSlug, style: 'width:100%;' });
+  const slugRow = el('div', { class: 'form-row' },
+    el('label', {}, '路线 ID（slug，可修改；与已有路线相同则覆盖更新）'), slugInput);
+  container.appendChild(slugRow);
+
+  const dupHint = el('div', { class: 'wear-badge warn', style: 'display:none;margin:6px 0;' }, '');
+  container.appendChild(dupHint);
+  const refreshDup = () => {
+    if (existing.has(slugInput.value.trim())) {
+      dupHint.style.display = ''; dupHint.textContent = '⚠️ 已存在同 ID 路线，保存将覆盖它';
+    } else { dupHint.style.display = 'none'; }
+  };
+  slugInput.addEventListener('input', refreshDup);
+  refreshDup();
+
+  const saveBtn = el('button', { class: 'btn btn-primary' }, '💾 保存路线');
+  saveBtn.addEventListener('click', async () => {
+    const slug = slugInput.value.trim();
+    if (!slug) { toast('请填写路线 ID', 'warn'); return; }
+    if (!state.token) { toast('未连接，无法保存', 'error'); return; }
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      await fetchSaveRoute(state.apiUrl, state.token, slug, packRoutePayload(parsed));
+      toast('保存成功，正在刷新…', 'success');
+      await loadAndRender(true);
+      $$('.modal-overlay').forEach((m) => m.remove());
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 保存路线';
+    }
+  });
+  container.appendChild(saveBtn);
+}
+
+/** 通过 AI 一句话添加新路线。 */
+function openAddRouteByAi() {
+  if (!state.token) { toast('请先连接后再添加路线', 'warn'); return; }
+  const content = el('div', {});
+  const resultArea = el('div', { class: 'scrape-result' });
+  const label = el('label', {}, '🤖 用一句话描述路线，AI 会识别名称、距离、爬升、难度等字段');
+  const textarea = el('textarea', { id: 'add-route-ai', rows: 5, placeholder: '例如：武功山反穿，江西萍乡，24km 爬升1800m，山脊草甸地形，预计10小时' });
+  const actions = el('div', { class: 'gear-card-actions' });
+  const aiBtn = el('button', { class: 'btn btn-primary' }, '✨ AI 识别并生成');
+  actions.appendChild(aiBtn);
+
+  async function run() {
+    const text = textarea.value.trim();
+    if (!text) { toast('请先输入路线描述', 'warn'); return; }
+    aiBtn.disabled = true;
+    aiBtn.textContent = '识别中…';
+    resultArea.innerHTML = '';
+    try {
+      const res = await fetchAiRoute(state.apiUrl, state.token, text);
+      if (!res.ok || !res.data) {
+        throw new Error(res.error || 'AI 未返回有效字段');
+      }
+      renderRouteAiResult(resultArea, res.data, res.provider);
+    } catch (err) {
+      resultArea.appendChild(el('div', { class: 'error-text' }, err.message || 'AI 识别失败'));
+    } finally {
+      aiBtn.disabled = false;
+      aiBtn.textContent = '✨ AI 识别并生成';
+    }
+  }
+
+  aiBtn.addEventListener('click', run);
+  content.appendChild(el('div', { class: 'form-row' }, label, textarea));
+  content.appendChild(actions);
+  content.appendChild(resultArea);
+  showModal('✨ AI 添加路线', content, []);
 }
 
 // ---------- 计划 ----------

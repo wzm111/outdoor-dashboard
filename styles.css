@@ -650,3 +650,24 @@ textarea { resize: vertical; }
   text-decoration: line-through;
   color: #c98b8b;
 }
+
+/* ---------- 活动装备编辑态 ---------- */
+.gear-edit-row .gear-edit-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.btn-danger-outline {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+.btn-danger-outline:hover {
+  background: rgba(224, 108, 117, 0.12);
+}
+.gear-add-row {
+  margin-top: 12px;
+}
+.gear-add-row .gear-select {
+  width: 100%;
+}
