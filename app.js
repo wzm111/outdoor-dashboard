@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v12-2026-07-01';
+const APP_VERSION = 'v13-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -18,6 +18,14 @@ const state = {
   apiUrl: '',
   token: null,
   data: null, // { profile, gear[], routes[], activities[], body_logs[], plans[], segments[] }
+};
+
+// 装备库搜索/筛选/排序状态：跨重渲染保留（淘汰/恢复后 loadAndRender 不丢用户当前的筛选）
+const gearFilter = {
+  q: '',            // 搜索关键词（名称/品牌/型号/slug/备注）
+  category: 'all',  // 类别筛选
+  status: 'active', // active(仅在用) / retired(仅淘汰) / all(全部)
+  sort: 'category', // category / name / weight / usage
 };
 
 // ---------- 工具 ----------
@@ -773,49 +781,152 @@ function drawLine(canvas, points, color, forceMin, forceMax) {
 // ---------- 装备 ----------
 
 function renderGear() {
-  const gear = [...state.data.gear].sort((a, b) =>
-    String(a.category || '').localeCompare(String(b.category || '')) ||
-    String(a.slug || '').localeCompare(String(b.slug || '')));
+  const allGear = state.data.gear;
   const view = viewEl('gear');
   view.innerHTML = '';
 
   // 顶部标题 + AI 添加按钮
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
-    el('span', {}, `🎒 装备库（${gear.length}）`),
+    el('span', {}, `🎒 装备库（${allGear.length}）`),
     el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-ai' }, '✨ AI 添加')
   );
   view.appendChild(headerRow);
   $('.btn-sm[data-action="add-ai"]', headerRow).addEventListener('click', () => openAddGearByAi());
 
-  if (!gear.length) {
+  if (!allGear.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无装备'));
     return;
   }
 
-  // 正常装备按 category 分组
-  const activeGear = gear.filter((g) => g.condition !== 'retired');
-  const retiredGear = gear.filter((g) => g.condition === 'retired');
+  // 搜索/筛选/排序工具条 + 结果计数容器（计数在 applyGearFilter 内更新）
+  const countLabel = el('span', { class: 'gear-filter-count' }, '');
+  view.appendChild(buildGearToolbar(allGear, view, countLabel));
 
-  renderGearGroups(view, activeGear, false);
+  // 结果渲染区：独立容器，改动筛选条件时只重渲染这里，不动工具条（否则输入框会失焦）
+  const resultsBox = el('div', { class: 'gear-results' });
+  view.appendChild(resultsBox);
 
-  // 淘汰装备单独区域，默认折叠
-  if (retiredGear.length) {
-    const retiredGroup = el('div', { class: 'gear-group retired-group' });
-    const retiredHeader = el('div', { class: 'gear-group-header collapsed' },
-      el('span', {}, `🗑 已淘汰（${retiredGear.length}）`),
-      el('span', { class: 'gear-count' }, '点击展开')
-    );
-    const retiredBody = el('div', { class: 'gear-group-body collapsed' });
-    for (const g of retiredGear) {
-      retiredBody.appendChild(buildGearCard(g));
+  applyGearFilter(allGear, resultsBox, countLabel);
+}
+
+/** 构建装备工具条：搜索框 + 类别 + 状态 + 排序。改动即重算结果。 */
+function buildGearToolbar(allGear, view, countLabel) {
+  const bar = el('div', { class: 'gear-toolbar' });
+
+  // 关键：重算时只重渲染结果区，不重建工具条，避免搜索框失焦
+  const rerun = () => {
+    const resultsBox = $('.gear-results', view);
+    if (resultsBox) applyGearFilter(allGear, resultsBox, countLabel);
+  };
+
+  // 搜索框
+  const search = el('input', {
+    class: 'gear-search', type: 'search', value: gearFilter.q,
+    placeholder: '🔍 搜索名称 / 品牌 / 型号 / 备注',
+  });
+  search.addEventListener('input', () => { gearFilter.q = search.value; rerun(); });
+  bar.appendChild(search);
+
+  // 类别下拉：从现有装备动态收集
+  const cats = Array.from(new Set(allGear.map((g) => g.category || '未分类'))).sort();
+  const catSel = el('select', { class: 'gear-select' },
+    el('option', { value: 'all' }, '全部类别'),
+    ...cats.map((c) => el('option', gearFilter.category === c ? { value: c, selected: 'selected' } : { value: c }, categoryLabel(c)))
+  );
+  catSel.value = gearFilter.category;
+  catSel.addEventListener('change', () => { gearFilter.category = catSel.value; rerun(); });
+  bar.appendChild(catSel);
+
+  // 状态下拉：在用 / 淘汰 / 全部
+  const statusSel = el('select', { class: 'gear-select', 'data-role': 'status' },
+    el('option', { value: 'active' }, '仅在用'),
+    el('option', { value: 'retired' }, '仅淘汰'),
+    el('option', { value: 'all' }, '全部状态')
+  );
+  statusSel.value = gearFilter.status;
+  statusSel.addEventListener('change', () => { gearFilter.status = statusSel.value; rerun(); });
+  bar.appendChild(statusSel);
+
+  // 排序下拉
+  const sortSel = el('select', { class: 'gear-select' },
+    el('option', { value: 'category' }, '按类别'),
+    el('option', { value: 'name' }, '按名称'),
+    el('option', { value: 'weight' }, '按重量（重→轻）'),
+    el('option', { value: 'usage' }, '按使用次数（多→少）')
+  );
+  sortSel.value = gearFilter.sort;
+  sortSel.addEventListener('change', () => { gearFilter.sort = sortSel.value; rerun(); });
+  bar.appendChild(sortSel);
+
+  // 计数标签放到工具条末尾
+  bar.appendChild(countLabel);
+
+  return bar;
+}
+
+/** 按 gearFilter 过滤 + 排序，把结果渲染进 resultsBox，并更新计数标签。 */
+function applyGearFilter(allGear, resultsBox, countLabel) {
+  const q = gearFilter.q.trim().toLowerCase();
+
+  let list = allGear.filter((g) => {
+    // 状态
+    const retired = g.condition === 'retired';
+    if (gearFilter.status === 'active' && retired) return false;
+    if (gearFilter.status === 'retired' && !retired) return false;
+    // 类别
+    if (gearFilter.category !== 'all' && (g.category || '未分类') !== gearFilter.category) return false;
+    // 关键词：名称/品牌/型号/slug/备注
+    if (q) {
+      const hay = [g.name, g.brand, g.model, g.slug, g.notes].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
     }
-    retiredHeader.addEventListener('click', () => {
-      const hidden = retiredBody.classList.toggle('collapsed');
-      retiredHeader.classList.toggle('collapsed', hidden);
-    });
-    retiredGroup.appendChild(retiredHeader);
-    retiredGroup.appendChild(retiredBody);
-    view.appendChild(retiredGroup);
+    return true;
+  });
+
+  // 排序
+  const byStr = (a, b) => String(a || '').localeCompare(String(b || ''));
+  if (gearFilter.sort === 'name') {
+    list.sort((a, b) => byStr(a.name || a.slug, b.name || b.slug));
+  } else if (gearFilter.sort === 'weight') {
+    list.sort((a, b) => (Number(b.weight_g) || 0) - (Number(a.weight_g) || 0));
+  } else if (gearFilter.sort === 'usage') {
+    list.sort((a, b) => (Number(b.usage_count) || 0) - (Number(a.usage_count) || 0));
+  } else {
+    // category：先类别再 slug
+    list.sort((a, b) => byStr(a.category, b.category) || byStr(a.slug, b.slug));
+  }
+
+  countLabel.textContent = `匹配 ${list.length} / ${allGear.length} 件`;
+
+  resultsBox.innerHTML = '';
+  if (!list.length) {
+    resultsBox.appendChild(el('div', { class: 'empty' }, '没有符合条件的装备，试试放宽筛选或清空搜索。'));
+    return;
+  }
+
+  // 排序为 name/weight/usage 时用平铺列表（不分组），category 时按类别分组
+  if (gearFilter.sort === 'category') {
+    renderGearGroups(resultsBox, list);
+  } else {
+    const flat = el('div', { class: 'gear-group-body gear-flat' });
+    for (const g of list) flat.appendChild(buildGearCard(g));
+    resultsBox.appendChild(flat);
+  }
+
+  // 可发现性：默认只看在用装备时，若另有淘汰装备，底部给一个切换入口
+  if (gearFilter.status === 'active') {
+    const retiredCount = allGear.filter((g) => g.condition === 'retired').length;
+    if (retiredCount) {
+      const link = el('button', { class: 'gear-retired-link' }, `🗑 另有 ${retiredCount} 件已淘汰装备，点击查看`);
+      link.addEventListener('click', () => {
+        gearFilter.status = 'retired';
+        // 同步更新工具条上的状态下拉，再重算
+        const statusSel = $('.gear-toolbar .gear-select[data-role="status"]');
+        if (statusSel) statusSel.value = 'retired';
+        applyGearFilter(allGear, resultsBox, countLabel);
+      });
+      resultsBox.appendChild(link);
+    }
   }
 }
 

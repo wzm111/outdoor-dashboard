@@ -246,6 +246,62 @@ canvas { width: 100%; display: block; }
 [hidden] { display: none !important; }
 
 /* ---------- 装备分组与卡片 ---------- */
+
+/* 装备搜索/筛选/排序工具条 */
+.gear-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.gear-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 9px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+.gear-search:focus { outline: none; border-color: var(--accent); }
+.gear-select {
+  padding: 9px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.gear-select:focus { outline: none; border-color: var(--accent); }
+.gear-filter-count {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  margin-left: auto;
+}
+/* 平铺结果（非类别排序时）直接用网格，无分组外框 */
+.gear-results .gear-flat {
+  background: transparent;
+  padding: 0;
+}
+/* 淘汰装备切换入口：低调的文字按钮 */
+.gear-retired-link {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 10px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+.gear-retired-link:hover { border-color: #5a3a3a; color: #c98b8b; }
+
 .gear-group {
   background: var(--bg-card);
   border: 1px solid var(--border);
