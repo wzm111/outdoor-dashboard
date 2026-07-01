@@ -872,7 +872,7 @@ function buildGearCard(g) {
     retireBtn.disabled = true;
     retireBtn.textContent = isRetired ? '恢复中…' : '淘汰中…';
     try {
-      await fetchSaveGear(state.apiUrl, state.token, g.slug, { ...g, condition: nextCondition });
+      await fetchSaveGear(state.apiUrl, state.token, g.slug, packGearPayload({ ...g, condition: nextCondition }));
       toast(isRetired ? '已恢复装备' : '已淘汰装备', 'success');
       await loadAndRender(true);
     } catch (err) {
