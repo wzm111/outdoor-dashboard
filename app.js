@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v7-2026-07-01';
+const APP_VERSION = 'v8-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -347,6 +347,23 @@ async function fetchScrapeGear(apiUrl, token, url) {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`抓取失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+async function fetchAiGear(apiUrl, token, text, sourceUrl) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/ai/gear`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ text, source_url: sourceUrl }),
+  }, 45000, 'AI 识别装备');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`AI 识别失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
   }
   return res.json();
 }
@@ -836,61 +853,125 @@ async function openGearUpdate(g) {
   const sourceUrl = getGearSourceUrl(g);
   const content = el('div', {});
 
-  // 上部：网络抓取
+  // 结果展示区（三个选项卡共用）
+  const resultArea = el('div', { class: 'scrape-result' });
+
+  // 选项卡按钮
+  const tabs = el('div', { class: 'modal-tabs' });
+  const panels = {};
+
+  function switchTab(name) {
+    for (const [n, btn] of Object.entries(buttons)) {
+      btn.classList.toggle('active', n === name);
+    }
+    for (const [n, panel] of Object.entries(panels)) {
+      panel.hidden = n !== name;
+    }
+  }
+
+  const buttons = {};
+
+  // ---------- 面板 1：网页抓取 ----------
+  panels.scrape = el('div', {});
   const urlRow = el('div', { class: 'form-row' },
     el('label', {}, '商品 URL（REI / 品牌官网等）'),
     el('input', { id: 'update-url', type: 'url', value: sourceUrl, placeholder: 'https://www.rei.com/product/...' })
   );
   const scrapeBtn = el('button', { class: 'btn btn-primary' }, '🔍 从网页抓取');
-  const scrapeResult = el('div', { class: 'scrape-result' });
 
   scrapeBtn.addEventListener('click', async () => {
     const url = $('#update-url').value.trim();
     if (!url) { toast('请先填写商品 URL', 'warn'); return; }
     scrapeBtn.disabled = true;
     scrapeBtn.textContent = '抓取中…';
-    scrapeResult.innerHTML = '';
+    resultArea.innerHTML = '';
     try {
       const data = await fetchScrapeGear(state.apiUrl, state.token, url);
       const merged = mergeGearData(g, { ...data, source_url: url });
-      renderScrapeResult(scrapeResult, merged, g);
+      renderScrapeResult(resultArea, merged, g);
     } catch (err) {
-      scrapeResult.appendChild(el('div', { class: 'error-text' }, err.message || '抓取失败'));
+      resultArea.appendChild(el('div', { class: 'error-text' }, err.message || '抓取失败'));
     } finally {
       scrapeBtn.disabled = false;
       scrapeBtn.textContent = '🔍 从网页抓取';
     }
   });
 
-  // 下部：粘贴规格文本
-  const pasteLabel = el('label', {}, '或粘贴商品规格文本（京东/天猫详情页复制即可）');
+  panels.scrape.appendChild(urlRow);
+  panels.scrape.appendChild(scrapeBtn);
+
+  // ---------- 面板 2：AI 识别 ----------
+  panels.ai = el('div', {});
+  const aiLabel = el('label', {}, '🤖 用自然语言描述装备（或粘贴规格文本，AI 自动提取字段）');
+  const aiArea = el('textarea', { id: 'update-ai', rows: 6, placeholder: '例如：始祖鸟 Beta LT 硬壳冲锋衣，黑色 M 码，GORE-TEX 面料，重约 350g，价格 4500 元' });
+  const aiBtn = el('button', { class: 'btn btn-primary' }, '✨ AI 识别');
+
+  aiBtn.addEventListener('click', async () => {
+    const text = $('#update-ai').value.trim();
+    if (!text) { toast('请先输入装备描述', 'warn'); return; }
+    aiBtn.disabled = true;
+    aiBtn.textContent = '识别中…';
+    resultArea.innerHTML = '';
+    try {
+      const url = $('#update-url').value.trim();
+      const res = await fetchAiGear(state.apiUrl, state.token, text, url);
+      if (!res.ok || !res.data) {
+        throw new Error(res.error || 'AI 未返回有效字段');
+      }
+      const merged = mergeGearData(g, { ...res.data, source_url: url || undefined });
+      renderScrapeResult(resultArea, merged, g, res.provider);
+    } catch (err) {
+      resultArea.appendChild(el('div', { class: 'error-text' }, err.message || 'AI 识别失败'));
+    } finally {
+      aiBtn.disabled = false;
+      aiBtn.textContent = '✨ AI 识别';
+    }
+  });
+
+  panels.ai.appendChild(el('div', { class: 'form-row' }, aiLabel, aiArea));
+  panels.ai.appendChild(aiBtn);
+
+  // ---------- 面板 3：粘贴规格 ----------
+  panels.paste = el('div', {});
+  const pasteLabel = el('label', {}, '📋 粘贴商品规格文本（京东/天猫详情页复制即可）');
   const pasteArea = el('textarea', { id: 'update-spec', rows: 6, placeholder: '重量：380g\n面料：GORE-TEX 3L\n…' });
   const parseBtn = el('button', { class: 'btn' }, '📋 解析粘贴文本');
-  const pasteResult = el('div', { class: 'scrape-result' });
 
   parseBtn.addEventListener('click', () => {
     const text = $('#update-spec').value.trim();
     if (!text) { toast('请先粘贴规格文本', 'warn'); return; }
     const parsed = parseSpecText(text);
     const merged = mergeGearData(g, parsed);
-    renderScrapeResult(pasteResult, merged, g);
+    renderScrapeResult(resultArea, merged, g);
   });
 
-  content.appendChild(urlRow);
-  content.appendChild(scrapeBtn);
-  content.appendChild(scrapeResult);
-  content.appendChild(el('hr', { class: 'modal-divider' }));
-  content.appendChild(pasteLabel);
-  content.appendChild(pasteArea);
-  content.appendChild(parseBtn);
-  content.appendChild(pasteResult);
+  panels.paste.appendChild(el('div', { class: 'form-row' }, pasteLabel, pasteArea));
+  panels.paste.appendChild(parseBtn);
+
+  // 组装选项卡
+  for (const [name, label] of [['scrape', '🔍 网页抓取'], ['ai', '✨ AI 识别'], ['paste', '📋 粘贴规格']]) {
+    const btn = el('button', { class: 'modal-tab' + (name === 'scrape' ? ' active' : ''), type: 'button' }, label);
+    btn.addEventListener('click', () => switchTab(name));
+    buttons[name] = btn;
+    tabs.appendChild(btn);
+  }
+
+  content.appendChild(tabs);
+  for (const panel of Object.values(panels)) {
+    panel.className = 'modal-tab-panel';
+    content.appendChild(panel);
+  }
+  // 默认显示第一个，其余隐藏
+  switchTab('scrape');
+  content.appendChild(resultArea);
 
   showModal(g.name || g.slug || '更新装备', content, []);
 }
 
-function renderScrapeResult(container, merged, original) {
+function renderScrapeResult(container, merged, original, provider) {
   container.innerHTML = '';
-  const title = el('div', { class: 'section-title' }, '抓取结果（确认后保存）');
+  const titleText = provider ? `AI 识别结果（${provider === 'moonshot' ? 'Kimi' : 'DeepSeek'}）` : '抓取结果';
+  const title = el('div', { class: 'section-title' }, `${titleText}（确认后保存）`);
   container.appendChild(title);
   container.appendChild(gearFactList(merged));
 
@@ -899,7 +980,7 @@ function renderScrapeResult(container, merged, original) {
     if (JSON.stringify(merged[k]) !== JSON.stringify(original[k])) changed.push(k);
   }
   if (!changed.length) {
-    container.appendChild(el('div', { class: 'empty' }, '没有识别到新字段，请尝试粘贴更完整的规格文本。'));
+    container.appendChild(el('div', { class: 'empty' }, '没有识别到新字段，请尝试输入更完整的描述或规格文本。'));
     return;
   }
 

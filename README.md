@@ -80,11 +80,14 @@ bash web/sync-to-pages.sh --dry-run  # 只看会同步什么，不推送
 装备卡片上两个按钮：
 
 - **详情**：展开装备全部字段（重量、材质、防水、价格、尺码、季节、地形等）。
-- **更新**：通过两种方式补全/更新装备信息：
+- **更新**：通过三种方式补全/更新装备信息：
   1. **网页抓取**：填写 REI / 品牌官网商品 URL，由后端 Edge Function 代理抓取重量、材质、防水、价格、颜色尺码等字段。
-  2. **粘贴规格文本**：从京东/天猫商品详情页复制规格参数文本，前端自动解析重量、材质、防水、价格、颜色尺码、季节、地形等字段。
+  2. **AI 识别**：用自然语言描述装备（或粘贴规格文本），后端同时调用 Kimi（Moonshot）和 DeepSeek 自动提取结构化字段，取结果更完整的一方。
+  3. **粘贴规格文本**：从京东/天猫商品详情页复制规格参数文本，前端自动解析重量、材质、防水、价格、颜色尺码、季节、地形等字段。
 
-网页抓取需要先在 Supabase 部署 `/api/scrape/gear` 端点，参考 `web/scrape-gear-edge-function.ts`。京东/天猫反爬较强，若抓取失败请使用粘贴规格文本方式。
+网页抓取和 AI 识别需要先在 Supabase 部署 `/api/scrape/gear` 与 `/api/ai/gear` 端点，参考 `web/scrape-gear-edge-function.ts` 与 `supabase/functions/api/index.ts`。部署前需在 Supabase 环境变量中配置 `MOONSHOT_API_KEY` 和 `DEEPSEEK_API_KEY`。
+
+京东/天猫反爬较强，若抓取失败请优先使用 AI 识别或粘贴规格文本方式。
 
 ## 数据契约
 

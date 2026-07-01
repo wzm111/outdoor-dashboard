@@ -441,8 +441,32 @@ textarea { resize: vertical; }
 /* 路线行可点击感 */
 .route-row .btn-sm { padding: 4px 10px; font-size: 12px; }
 
-/* 星星 */
-.stars {
+/* 弹窗内选项卡 */
+.modal-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.modal-tab {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.modal-tab:hover { color: var(--text); border-color: var(--accent); }
+.modal-tab.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  color: var(--text);
+  font-weight: 600;
+}
+.modal-tab-panel { animation: fade 0.2s ease; }
+
   color: #e0a458;
   letter-spacing: 1px;
   font-size: 14px;
