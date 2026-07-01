@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v8-2026-07-01';
+const APP_VERSION = 'v9-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -979,28 +979,16 @@ async function openGearUpdate(g) {
   showModal(g.name || g.slug || '更新装备', content, []);
 }
 
-/** 根据装备对象生成一段 AI 可识别的自然语言描述。 */
+/** 根据装备对象生成 AI 识别提示：只保留名称/品牌/型号，让 AI 自己检索参数。
+ *  不把已知参数（重量、材质等）写进去，避免干扰 AI 反填更完整/准确的数据。
+ */
 function buildAiPrompt(g) {
   const parts = [];
   if (g.name) parts.push(g.name);
   if (g.brand && g.model) parts.push(`${g.brand} ${g.model}`);
   else if (g.brand) parts.push(g.brand);
   else if (g.model) parts.push(g.model);
-
-  const attrs = [];
-  if (g.category) attrs.push(`类别：${g.category}`);
-  if (g.type) attrs.push(`类型：${g.type}`);
-  if (g.weight_g != null) attrs.push(`重量约 ${g.weight_g}g`);
-  if (g.material) attrs.push(`材质：${g.material}`);
-  if (g.waterproof === true) attrs.push('防水');
-  if (g.breathable === true) attrs.push('透气');
-  if (g.warmth) attrs.push(`保暖：${g.warmth}`);
-  if (g.color) attrs.push(`颜色：${g.color}`);
-  if (g.size) attrs.push(`尺码：${g.size}`);
-  if (g.price != null) attrs.push(`价格约 ${g.price} 元`);
-
-  if (attrs.length) parts.push('，' + attrs.join('，'));
-  return parts.join('');
+  return parts.join(' ');
 }
 
 function renderScrapeResult(container, merged, original, provider) {
