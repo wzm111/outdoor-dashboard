@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v9-2026-07-01';
+const APP_VERSION = 'v10-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -959,9 +959,9 @@ async function openGearUpdate(g) {
   panels.paste.appendChild(el('div', { class: 'form-row' }, pasteLabel, pasteArea));
   panels.paste.appendChild(parseBtn);
 
-  // 组装选项卡
-  for (const [name, label] of [['scrape', '🔍 网页抓取'], ['ai', '✨ AI 识别'], ['paste', '📋 粘贴规格']]) {
-    const btn = el('button', { class: 'modal-tab' + (name === 'scrape' ? ' active' : ''), type: 'button' }, label);
+  // 组装选项卡：AI 识别放第一位
+  for (const [name, label] of [['ai', '✨ AI 识别'], ['scrape', '🔍 网页抓取'], ['paste', '📋 粘贴规格']]) {
+    const btn = el('button', { class: 'modal-tab' + (name === 'ai' ? ' active' : ''), type: 'button' }, label);
     btn.addEventListener('click', () => switchTab(name));
     buttons[name] = btn;
     tabs.appendChild(btn);
@@ -972,8 +972,8 @@ async function openGearUpdate(g) {
     panel.className = 'modal-tab-panel';
     content.appendChild(panel);
   }
-  // 默认显示第一个，其余隐藏
-  switchTab('scrape');
+  // 默认显示 AI 识别选项卡
+  switchTab('ai');
   content.appendChild(resultArea);
 
   showModal(g.name || g.slug || '更新装备', content, []);
@@ -984,10 +984,14 @@ async function openGearUpdate(g) {
  */
 function buildAiPrompt(g) {
   const parts = [];
-  if (g.name) parts.push(g.name);
-  if (g.brand && g.model) parts.push(`${g.brand} ${g.model}`);
-  else if (g.brand) parts.push(g.brand);
-  else if (g.model) parts.push(g.model);
+  // 名称里通常已包含品牌/型号，避免重复；若名称缺失再用 brand/model 兜底
+  if (g.name) {
+    parts.push(g.name);
+  } else {
+    if (g.brand && g.model) parts.push(`${g.brand} ${g.model}`);
+    else if (g.brand) parts.push(g.brand);
+    else if (g.model) parts.push(g.model);
+  }
   return parts.join(' ');
 }
 
