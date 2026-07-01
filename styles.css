@@ -347,6 +347,66 @@ canvas { width: 100%; display: block; }
 /* 装备详情弹窗里「用过的活动」小标题：比默认 section-title 紧凑些 */
 .rel-heading { margin: 18px 0 10px; font-size: 15px; }
 
+/* ---------- 装备使用统计 / 磨损·闲置提醒 ---------- */
+
+.gear-usage-overview { margin-bottom: 18px; }
+
+/* 可点击的统计卡片（待关注 → 滚到预警区） */
+.stat-card-clickable { cursor: pointer; transition: border-color 0.15s; }
+.stat-card-clickable:hover { border-color: var(--accent); }
+
+/* 使用排行：纯 DOM 比例条 */
+.usage-rank { display: flex; flex-direction: column; gap: 8px; }
+.usage-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.usage-rank-label {
+  flex: 0 0 34%;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.usage-rank-row:hover .usage-rank-label { color: var(--accent); }
+.usage-bar-track {
+  flex: 1;
+  height: 14px;
+  background: var(--bg-elev);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.usage-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 7px;
+  transition: width 0.3s ease;
+}
+.usage-rank-meta {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 磨损/闲置预警徽标（三色） */
+.wear-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 2px;
+}
+.wear-alert { background: rgba(224, 108, 117, 0.16); color: var(--danger); }
+.wear-warn { background: rgba(224, 164, 88, 0.16); color: var(--warn); }
+.wear-idle { background: var(--bg-elev); color: var(--text-dim); }
+
 .gear-group {
   background: var(--bg-card);
   border: 1px solid var(--border);

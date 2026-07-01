@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v14-2026-07-01';
+const APP_VERSION = 'v15-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -175,6 +175,67 @@ function activitiesUsingGear(slug) {
   return (state.data.activities || [])
     .filter((a) => gearSlugsOf(a).includes(slug))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+// ---------- 装备使用统计 / 磨损·闲置提醒 ----------
+
+// 按类别的经验寿命阈值（里程 km）。仅作参考、非精确值；找不到的类别不按里程判磨损。
+const GEAR_KM_LIFESPAN = {
+  shoes: 600,      // 跑鞋/徒步鞋经验寿命
+  backpack: 1500,
+  poles: 8000,
+  pants: 1200,
+  jacket: 1500,
+};
+const IDLE_WARN_DAYS = 180; // 用过但超过半年没再用 → 闲置提醒
+
+/** 两个日期（YYYY-MM-DD 或可被 Date.parse 解析）相差的天数，解析失败返回 null。 */
+function daysBetween(fromDate, toDate) {
+  const a = Date.parse(String(fromDate).slice(0, 10));
+  const b = Date.parse(String(toDate).slice(0, 10));
+  if (isNaN(a) || isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+/** 计算一件装备的磨损/闲置状态（启发式，非精确）。
+ *  返回 { level:'ok'|'warn'|'alert'|'idle', reasons:[中文], pctOfLife:0-1|null, idleDays:number|null }
+ *  - retired 装备直接判 ok（已退役不预警）。
+ *  - 磨损：total_distance_km / 类别阈值 ≥0.8→warn，≥1.0→alert。
+ *  - 闲置：用过（usage_count>0）且 last_used_date 距今 > IDLE_WARN_DAYS。从没用过的不算闲置。 */
+function gearWearStatus(g, today) {
+  const reasons = [];
+  if (!g || g.condition === 'retired') return { level: 'ok', reasons, pctOfLife: null, idleDays: null };
+
+  // 磨损（仅对有经验阈值的类别 + 有里程数据）
+  let level = 'ok';
+  let pctOfLife = null;
+  const limit = GEAR_KM_LIFESPAN[g.category];
+  const km = Number(g.total_distance_km);
+  if (limit && !isNaN(km) && km > 0) {
+    pctOfLife = km / limit;
+    const pctTxt = Math.round(pctOfLife * 100);
+    if (pctOfLife >= 1.0) {
+      level = 'alert';
+      reasons.push(`里程 ${num(km, 1)} / ${limit} km（${pctTxt}%，已达经验寿命）`);
+    } else if (pctOfLife >= 0.8) {
+      level = 'warn';
+      reasons.push(`里程 ${num(km, 1)} / ${limit} km（${pctTxt}%，接近经验寿命）`);
+    }
+  }
+
+  // 闲置（只对用过的装备判；磨损预警优先级更高，磨损已 warn/alert 时不再叠加闲置为主状态）
+  let idleDays = null;
+  const usage = Number(g.usage_count) || 0;
+  if (usage > 0 && g.last_used_date && today) {
+    const d = daysBetween(g.last_used_date, today);
+    if (d != null && d > IDLE_WARN_DAYS) {
+      idleDays = d;
+      reasons.push(`已 ${d} 天未使用`);
+      if (level === 'ok') level = 'idle';
+    }
+  }
+
+  return { level, reasons, pctOfLife, idleDays };
 }
 
 /** 把装备数据渲染成只读键值列表。 */
@@ -867,6 +928,125 @@ function drawLine(canvas, points, color, forceMin, forceMax) {
 
 // ---------- 装备 ----------
 
+/** 装备使用概览：统计卡片 + 使用排行（DOM 比例条）+ 磨损/闲置预警。
+ *  只吃在用装备（condition!=='retired'），纯读已加载字段，不发 API、不写回。 */
+function gearUsageOverview(gearList) {
+  const box = el('div', { class: 'gear-usage-overview' });
+  const active = (gearList || []).filter((g) => g.condition !== 'retired');
+  if (!active.length) return box; // 无在用装备则不显示概览
+
+  const today = fmtDate(new Date().toISOString());
+
+  // ---- 汇总统计 ----
+  let totalKm = 0, totalUse = 0, totalHours = 0;
+  let mostUsed = null;
+  const wearMap = new Map(); // slug -> status
+  let attentionCount = 0;
+  for (const g of active) {
+    const km = Number(g.total_distance_km); if (!isNaN(km)) totalKm += km;
+    const uc = Number(g.usage_count); if (!isNaN(uc)) totalUse += uc;
+    const hr = Number(g.total_duration_hours); if (!isNaN(hr)) totalHours += hr;
+    if ((Number(g.usage_count) || 0) > (mostUsed ? Number(mostUsed.usage_count) || 0 : -1)) mostUsed = g;
+    const st = gearWearStatus(g, today);
+    wearMap.set(g.slug, st);
+    if (st.level !== 'ok') attentionCount++;
+  }
+
+  // ---- (a) 统计卡片行 ----
+  const statGrid = el('div', { class: 'stat-grid' });
+  const statCard = (label, value, unit) =>
+    el('div', { class: 'stat-card' },
+      el('div', { class: 'label' }, label),
+      el('div', { class: 'value' }, value, unit ? el('span', { class: 'unit' }, ' ' + unit) : '')
+    );
+  statGrid.appendChild(statCard('累计总里程', num(totalKm, 0), 'km'));
+  statGrid.appendChild(statCard('累计出勤', String(totalUse), `次 · ${num(totalHours, 0)}h`));
+  statGrid.appendChild(statCard('最常用装备',
+    mostUsed && (Number(mostUsed.usage_count) || 0) > 0 ? (mostUsed.name || mostUsed.slug) : '—',
+    mostUsed && (Number(mostUsed.usage_count) || 0) > 0 ? `${mostUsed.usage_count} 次` : ''));
+  // 待关注卡片：可点击滚动到预警区
+  const attnCard = statCard('待关注', String(attentionCount), '件');
+  if (attentionCount > 0) {
+    attnCard.classList.add('stat-card-clickable');
+    attnCard.addEventListener('click', () => {
+      const w = $('.wear-warn-section', box);
+      if (w) w.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+  statGrid.appendChild(attnCard);
+  box.appendChild(statGrid);
+
+  // ---- (b) 使用排行（比例条，Top 8）----
+  const ranked = active
+    .filter((g) => (Number(g.usage_count) || 0) > 0)
+    .sort((a, b) => (Number(b.usage_count) || 0) - (Number(a.usage_count) || 0))
+    .slice(0, 8);
+  const rankCard = el('div', { class: 'chart-card' });
+  rankCard.appendChild(el('h3', {}, '🏆 使用排行（按次数）'));
+  if (!ranked.length) {
+    rankCard.appendChild(el('div', { class: 'empty' }, '暂无使用记录'));
+  } else {
+    const maxUse = Number(ranked[0].usage_count) || 1;
+    const rank = el('div', { class: 'usage-rank' });
+    for (const g of ranked) {
+      const uc = Number(g.usage_count) || 0;
+      const km = Number(g.total_distance_km) || 0;
+      const pct = Math.max(4, Math.round((uc / maxUse) * 100)); // 至少 4% 可见
+      const row = el('div', { class: 'usage-rank-row', title: '点击查看详情' },
+        el('div', { class: 'usage-rank-label' }, g.name || g.slug),
+        el('div', { class: 'usage-bar-track' }, el('div', { class: 'usage-bar-fill', style: `width:${pct}%;` })),
+        el('div', { class: 'usage-rank-meta' }, `${uc} 次${km > 0 ? ' · ' + num(km, 0) + ' km' : ''}`)
+      );
+      row.addEventListener('click', () => openGearDetail(g));
+      rank.appendChild(row);
+    }
+    rankCard.appendChild(rank);
+  }
+  box.appendChild(rankCard);
+
+  // ---- (c) 磨损/闲置预警列表 ----
+  const order = { alert: 0, warn: 1, idle: 2 };
+  const warned = active
+    .map((g) => ({ g, st: wearMap.get(g.slug) }))
+    .filter((x) => x.st && x.st.level !== 'ok')
+    .sort((a, b) => (order[a.st.level] - order[b.st.level]) ||
+      ((b.st.pctOfLife || 0) - (a.st.pctOfLife || 0)));
+
+  const warnCard = el('div', { class: 'chart-card wear-warn-section' });
+  warnCard.appendChild(el('h3', {}, '🔧 磨损 / 闲置提醒（经验参考）'));
+  if (!warned.length) {
+    warnCard.appendChild(el('div', { class: 'empty' }, '所有在用装备状态良好 ✅'));
+  } else {
+    const list = el('div', { class: 'rel-list' });
+    const badgeOf = (lvl) => lvl === 'alert' ? ['🔴', 'wear-badge wear-alert', '已达经验寿命']
+      : lvl === 'warn' ? ['🟡', 'wear-badge wear-warn', '接近经验寿命']
+      : ['💤', 'wear-badge wear-idle', '久未使用'];
+    for (const { g, st } of warned) {
+      const [icon, cls, label] = badgeOf(st.level);
+      const item = el('div', { class: 'rel-item' },
+        el('div', { class: 'rel-info' },
+          el('div', { class: 'rel-name' },
+            el('span', { class: cls }, `${icon} ${label}`),
+            ' ' + (g.name || g.slug)),
+          el('div', { class: 'rel-brief' }, st.reasons.join(' · '))
+        ),
+        (() => {
+          const btn = el('button', { class: 'btn-sm' }, '详情');
+          btn.addEventListener('click', () => openGearDetail(g));
+          return btn;
+        })()
+      );
+      list.appendChild(item);
+    }
+    warnCard.appendChild(list);
+    warnCard.appendChild(el('div', { class: 'rel-summary rel-summary-total' },
+      '阈值为按类别的经验参考值，非精确寿命；请结合实际磨损情况判断。'));
+  }
+  box.appendChild(warnCard);
+
+  return box;
+}
+
 function renderGear() {
   const allGear = state.data.gear;
   const view = viewEl('gear');
@@ -884,6 +1064,9 @@ function renderGear() {
     view.appendChild(el('div', { class: 'empty' }, '暂无装备'));
     return;
   }
+
+  // 使用统计概览：统计卡片 + 使用排行 + 磨损/闲置预警（放在筛选工具条之上）
+  view.appendChild(gearUsageOverview(allGear));
 
   // 搜索/筛选/排序工具条 + 结果计数容器（计数在 applyGearFilter 内更新）
   const countLabel = el('span', { class: 'gear-filter-count' }, '');
@@ -939,7 +1122,9 @@ function buildGearToolbar(allGear, view, countLabel) {
     el('option', { value: 'category' }, '按类别'),
     el('option', { value: 'name' }, '按名称'),
     el('option', { value: 'weight' }, '按重量（重→轻）'),
-    el('option', { value: 'usage' }, '按使用次数（多→少）')
+    el('option', { value: 'usage' }, '按使用次数（多→少）'),
+    el('option', { value: 'distance' }, '按里程（多→少）'),
+    el('option', { value: 'recent' }, '按最近使用')
   );
   sortSel.value = gearFilter.sort;
   sortSel.addEventListener('change', () => { gearFilter.sort = sortSel.value; rerun(); });
@@ -978,6 +1163,11 @@ function applyGearFilter(allGear, resultsBox, countLabel) {
     list.sort((a, b) => (Number(b.weight_g) || 0) - (Number(a.weight_g) || 0));
   } else if (gearFilter.sort === 'usage') {
     list.sort((a, b) => (Number(b.usage_count) || 0) - (Number(a.usage_count) || 0));
+  } else if (gearFilter.sort === 'distance') {
+    list.sort((a, b) => (Number(b.total_distance_km) || 0) - (Number(a.total_distance_km) || 0));
+  } else if (gearFilter.sort === 'recent') {
+    // 最近使用在前；从没用过的（无 last_used_date）排最后，平局用 slug 稳定
+    list.sort((a, b) => byStr(b.last_used_date, a.last_used_date) || byStr(a.slug, b.slug));
   } else {
     // category：先类别再 slug
     list.sort((a, b) => byStr(a.category, b.category) || byStr(a.slug, b.slug));
@@ -991,7 +1181,7 @@ function applyGearFilter(allGear, resultsBox, countLabel) {
     return;
   }
 
-  // 排序为 name/weight/usage 时用平铺列表（不分组），category 时按类别分组
+  // 排序为 name/weight/usage/distance/recent 时用平铺列表（不分组），category 时按类别分组
   if (gearFilter.sort === 'category') {
     renderGearGroups(resultsBox, list);
   } else {
