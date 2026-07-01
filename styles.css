@@ -302,6 +302,51 @@ canvas { width: 100%; display: block; }
 }
 .gear-retired-link:hover { border-color: #5a3a3a; color: #c98b8b; }
 
+/* ---------- 活动 ↔ 装备关联 ---------- */
+
+/* 可点击的活动行：补 cursor 提示（hover 底色已由 tbody tr:hover 提供） */
+.activity-row { cursor: pointer; }
+/* 活动表里的装备件数徽标 */
+.gear-count-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--accent-dim);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* 弹窗内关联列表（活动用过的装备 / 装备用过的活动通用） */
+.rel-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.rel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.rel-item-missing { opacity: 0.6; }
+.rel-info { flex: 1; min-width: 0; }
+.rel-name { font-weight: 600; font-size: 14px; }
+.rel-brief { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.rel-summary {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.rel-summary-total {
+  margin-top: 12px;
+  margin-bottom: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+}
+/* 装备详情弹窗里「用过的活动」小标题：比默认 section-title 紧凑些 */
+.rel-heading { margin: 18px 0 10px; font-size: 15px; }
+
 .gear-group {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -316,6 +361,7 @@ canvas { width: 100%; display: block; }
   padding: 14px 18px;
   background: var(--bg-elev);
   cursor: pointer;
+  -webkit-user-select: none;
   user-select: none;
   font-weight: 600;
 }

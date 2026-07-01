@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v13-2026-07-01';
+const APP_VERSION = 'v14-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -156,6 +156,25 @@ function packGearPayload(data) {
 /** 从装备对象里取出可用的商品 URL。 */
 function getGearSourceUrl(g) {
   return g.source_url || g.url || g.link || g.purchase_url || '';
+}
+
+/** 从活动的 gear_used 中提取干净的 slug 列表。
+ *  gear_used 元素混合：多为 slug 字符串，少数是 dict（{slug:...} 或空 {}）。
+ *  两种都兼容，过滤掉 {} / 空值。 */
+function gearSlugsOf(activity) {
+  const gu = activity && activity.gear_used;
+  if (!Array.isArray(gu)) return [];
+  return gu
+    .map((e) => (typeof e === 'string' ? e : (e && e.slug) || ''))
+    .filter(Boolean);
+}
+
+/** 反查：某件装备（按 slug）上过哪些活动，按日期倒序。 */
+function activitiesUsingGear(slug) {
+  if (!slug) return [];
+  return (state.data.activities || [])
+    .filter((a) => gearSlugsOf(a).includes(slug))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 /** 把装备数据渲染成只读键值列表。 */
@@ -585,6 +604,8 @@ function statCard(label, value, unit) {
 // ---------- 活动 ----------
 
 function activityTable(acts) {
+  // slug → 装备对象，供行点击时快速取装备（避免每行 O(n) 查找）
+  const gearMap = new Map((state.data.gear || []).map((g) => [g.slug, g]));
   const wrap = el('div', { class: 'table-wrap' });
   const table = el('table');
   const headerCells = [
@@ -595,7 +616,7 @@ function activityTable(acts) {
   const hasRun = acts.some(isRunning);
   headerCells.push(el('th', {}, '时长'));
   if (hasRun) headerCells.push(el('th', {}, '配速'));
-  headerCells.push(el('th', {}, '平均心率'), el('th', {}, '感受'));
+  headerCells.push(el('th', {}, '平均心率'), el('th', {}, '感受'), el('th', {}, '装备'));
   table.appendChild(el('thead', {}, el('tr', {}, ...headerCells)));
 
   const tbody = el('tbody');
@@ -603,6 +624,7 @@ function activityTable(acts) {
     const running = isRunning(a);
     const pace = running ? paceMinPerKm(a.distance_km, a.duration_hours) : null;
     const duration = running ? fmtDuration(a.duration_hours) : num(a.duration_hours) + ' h';
+    const gearCount = gearSlugsOf(a).length;
     const cells = [
       el('td', {}, fmtDate(a.date)),
       el('td', {}, a.route || '—'),
@@ -614,9 +636,13 @@ function activityTable(acts) {
     if (hasRun) cells.push(el('td', { class: 'num' }, pace || '—'));
     cells.push(
       el('td', { class: 'num' }, a.avg_hr ? num(a.avg_hr, 0) : '—'),
-      el('td', {}, feltStars(a.felt))
+      el('td', {}, feltStars(a.felt)),
+      // 装备列：显示件数，可点整行查看
+      el('td', { class: 'num' }, gearCount ? el('span', { class: 'gear-count-badge' }, `🎒 ${gearCount}`) : '—')
     );
-    tbody.appendChild(el('tr', {}, ...cells));
+    const tr = el('tr', { class: 'activity-row', title: '点击查看本次装备' }, ...cells);
+    tr.addEventListener('click', () => openActivityGear(a, gearMap));
+    tbody.appendChild(tr);
   }
   table.appendChild(tbody);
   wrap.appendChild(table);
@@ -630,6 +656,67 @@ function feltStars(felt) {
   const filled = '★'.repeat(n);
   const empty = '☆'.repeat(5 - n);
   return el('span', { class: 'stars', title: felt }, filled + empty);
+}
+
+/** 活动 → 装备：弹窗列出本次活动用过的装备，可点进装备详情。
+ *  gearMap 可选（slug→装备）；不传时现场构建，保证从装备详情反向进来也能用。 */
+function openActivityGear(activity, gearMap) {
+  const map = gearMap || new Map((state.data.gear || []).map((g) => [g.slug, g]));
+  const slugs = gearSlugsOf(activity);
+  const wrap = el('div', {});
+
+  // 活动概要（距离/爬升/时长/感受）
+  const meta = [
+    activity.type,
+    activity.distance_km != null ? num(activity.distance_km) + ' km' : null,
+    activity.elevation_gain_m != null ? num(activity.elevation_gain_m, 0) + ' m 爬升' : null,
+  ].filter(Boolean).join(' · ');
+  if (meta) wrap.appendChild(el('div', { class: 'rel-summary' }, meta));
+
+  if (!slugs.length) {
+    wrap.appendChild(el('div', { class: 'empty' }, '本次活动未记录装备'));
+    showModal(`${fmtDate(activity.date)} · ${activity.route || '活动'} 用过的装备`, wrap,
+      [el('button', { class: 'btn' }, '关闭')]);
+    return;
+  }
+
+  const list = el('div', { class: 'rel-list' });
+  let totalWeight = 0, weighed = 0;
+  for (const slug of slugs) {
+    const g = map.get(slug);
+    if (g && g.weight_g != null && !isNaN(Number(g.weight_g))) {
+      totalWeight += Number(g.weight_g);
+      weighed += 1;
+    }
+    const item = el('div', { class: 'rel-item' + (g ? '' : ' rel-item-missing') });
+    const info = el('div', { class: 'rel-info' });
+    if (g) {
+      info.appendChild(el('div', { class: 'rel-name' }, g.name || g.slug));
+      info.appendChild(el('div', { class: 'rel-brief' },
+        [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category || '未分类')]
+          .filter(Boolean).join(' · ') || '—'));
+    } else {
+      info.appendChild(el('div', { class: 'rel-name' }, '未知装备'));
+      info.appendChild(el('div', { class: 'rel-brief' }, slug + '（装备库中未找到）'));
+    }
+    item.appendChild(info);
+    if (g) {
+      const btn = el('button', { class: 'btn-sm' }, '详情');
+      btn.addEventListener('click', () => openGearDetail(g));
+      item.appendChild(btn);
+    }
+    list.appendChild(item);
+  }
+  wrap.appendChild(list);
+
+  // 合计：件数 + 已知重量之和（为负重/磨损分析铺垫）
+  const summaryText = weighed
+    ? `本次共 ${slugs.length} 件，其中 ${weighed} 件有重量，合计约 ${num(totalWeight, 0)} g`
+    : `本次共 ${slugs.length} 件`;
+  wrap.appendChild(el('div', { class: 'rel-summary rel-summary-total' }, summaryText));
+
+  showModal(`${fmtDate(activity.date)} · ${activity.route || '活动'} 用过的装备`, wrap,
+    [el('button', { class: 'btn' }, '关闭')]);
 }
 
 function activityTypeGroup(type) {
@@ -1008,6 +1095,31 @@ function categoryLabel(cat) {
 function openGearDetail(g) {
   const wrap = el('div', {});
   wrap.appendChild(gearFactList(g));
+
+  // 装备 → 活动：反查这件装备上过哪些活动，形成双向导航闭环
+  const used = activitiesUsingGear(g.slug);
+  wrap.appendChild(el('div', { class: 'section-title rel-heading' }, `🗓 用过的活动（${used.length}）`));
+  if (!used.length) {
+    wrap.appendChild(el('div', { class: 'empty' }, '暂无关联活动记录'));
+  } else {
+    const list = el('div', { class: 'rel-list' });
+    for (const a of used) {
+      const item = el('div', { class: 'rel-item' });
+      const info = el('div', { class: 'rel-info' });
+      info.appendChild(el('div', { class: 'rel-name' }, `${fmtDate(a.date)} · ${a.route || '活动'}`));
+      info.appendChild(el('div', { class: 'rel-brief' },
+        [a.type, a.distance_km != null ? num(a.distance_km) + ' km' : null,
+         a.elevation_gain_m != null ? num(a.elevation_gain_m, 0) + ' m' : null]
+          .filter(Boolean).join(' · ') || '—'));
+      item.appendChild(info);
+      const btn = el('button', { class: 'btn-sm' }, '查看');
+      btn.addEventListener('click', () => openActivityGear(a));
+      item.appendChild(btn);
+      list.appendChild(item);
+    }
+    wrap.appendChild(list);
+  }
+
   showModal(g.name || g.slug || '装备详情', wrap, [el('button', { class: 'btn', 'data-action': 'close' }, '关闭')]);
 }
 
