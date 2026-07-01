@@ -902,11 +902,16 @@ async function openGearUpdate(g) {
 
   // ---------- 面板 2：AI 识别 ----------
   panels.ai = el('div', {});
-  const aiLabel = el('label', {}, '🤖 用自然语言描述装备（或粘贴规格文本，AI 自动提取字段）');
-  const aiArea = el('textarea', { id: 'update-ai', rows: 6, placeholder: '例如：始祖鸟 Beta LT 硬壳冲锋衣，黑色 M 码，GORE-TEX 面料，重约 350g，价格 4500 元' });
+  const aiDefault = buildAiPrompt(g);
+  const aiLabel = el('label', {}, '🤖 已根据当前装备生成描述，可直接识别，也可补充/修改后识别');
+  const aiArea = el('textarea', { id: 'update-ai', rows: 6, placeholder: '例如：始祖鸟 Beta LT 硬壳冲锋衣，黑色 M 码，GORE-TEX 面料，重约 350g，价格 4500 元' }, aiDefault);
+  const aiActions = el('div', { class: 'gear-card-actions' });
   const aiBtn = el('button', { class: 'btn btn-primary' }, '✨ AI 识别');
+  const aiAutoBtn = el('button', { class: 'btn' }, '🔄 重新生成描述');
+  aiActions.appendChild(aiBtn);
+  aiActions.appendChild(aiAutoBtn);
 
-  aiBtn.addEventListener('click', async () => {
+  async function runAiRecognition() {
     const text = $('#update-ai').value.trim();
     if (!text) { toast('请先输入装备描述', 'warn'); return; }
     aiBtn.disabled = true;
@@ -926,10 +931,16 @@ async function openGearUpdate(g) {
       aiBtn.disabled = false;
       aiBtn.textContent = '✨ AI 识别';
     }
+  }
+
+  aiBtn.addEventListener('click', runAiRecognition);
+  aiAutoBtn.addEventListener('click', () => {
+    $('#update-ai').value = buildAiPrompt(g);
+    toast('已重新生成描述', 'info');
   });
 
   panels.ai.appendChild(el('div', { class: 'form-row' }, aiLabel, aiArea));
-  panels.ai.appendChild(aiBtn);
+  panels.ai.appendChild(aiActions);
 
   // ---------- 面板 3：粘贴规格 ----------
   panels.paste = el('div', {});
@@ -966,6 +977,30 @@ async function openGearUpdate(g) {
   content.appendChild(resultArea);
 
   showModal(g.name || g.slug || '更新装备', content, []);
+}
+
+/** 根据装备对象生成一段 AI 可识别的自然语言描述。 */
+function buildAiPrompt(g) {
+  const parts = [];
+  if (g.name) parts.push(g.name);
+  if (g.brand && g.model) parts.push(`${g.brand} ${g.model}`);
+  else if (g.brand) parts.push(g.brand);
+  else if (g.model) parts.push(g.model);
+
+  const attrs = [];
+  if (g.category) attrs.push(`类别：${g.category}`);
+  if (g.type) attrs.push(`类型：${g.type}`);
+  if (g.weight_g != null) attrs.push(`重量约 ${g.weight_g}g`);
+  if (g.material) attrs.push(`材质：${g.material}`);
+  if (g.waterproof === true) attrs.push('防水');
+  if (g.breathable === true) attrs.push('透气');
+  if (g.warmth) attrs.push(`保暖：${g.warmth}`);
+  if (g.color) attrs.push(`颜色：${g.color}`);
+  if (g.size) attrs.push(`尺码：${g.size}`);
+  if (g.price != null) attrs.push(`价格约 ${g.price} 元`);
+
+  if (attrs.length) parts.push('，' + attrs.join('，'));
+  return parts.join('');
 }
 
 function renderScrapeResult(container, merged, original, provider) {
