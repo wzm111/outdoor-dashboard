@@ -535,6 +535,8 @@ canvas { width: 100%; display: block; }
 .modal-body {
   padding: 18px;
   overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 .modal-footer {
   padding: 14px 18px;
@@ -542,6 +544,7 @@ canvas { width: 100%; display: block; }
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  flex: 0 0 auto;
 }
 .modal-divider {
   border: none;
