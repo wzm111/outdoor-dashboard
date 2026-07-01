@@ -6,8 +6,9 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v4-2026-07-01';
+const APP_VERSION = 'v7-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
+console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
 const LS_KEY = 'outdoor-dashboard-config';
 const CACHE_KEY = 'outdoor-dashboard-snapshot';
@@ -36,6 +37,166 @@ function el(tag, attrs = {}, ...children) {
     node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
   }
   return node;
+}
+
+/** 从用户粘贴的商品规格文本中，尽可能提取结构化字段。 */
+function parseSpecText(text) {
+  const out = {};
+  if (!text) return out;
+  const t = String(text);
+
+  // 重量：匹配 "重量：380g" / "约 380 克" / "380g" 等
+  const weightMatch = t.match(/(?:重量|净重|约)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(g|克|kg|千克|lb|磅)/i);
+  if (weightMatch) {
+    const v = Number(weightMatch[1]);
+    const unit = weightMatch[2].toLowerCase();
+    out.weight_g = unit.startsWith('kg') || unit.startsWith('千克') ? Math.round(v * 1000)
+      : unit.startsWith('lb') || unit.startsWith('磅') ? Math.round(v * 453.592)
+      : Math.round(v);
+  }
+
+  // 防水 / 透气
+  if (/gore-tex|event|pertex|h2no|dry.q|防水|waterproof/i.test(t)) {
+    out.waterproof = true;
+  }
+  if (/gore-tex|透气|breathable|吸湿排汗/i.test(t)) {
+    if (out.breathable == null) out.breathable = true;
+  }
+
+  // 材质 / 面料
+  const matMatch = t.match(/(?:材质|面料|fabric|material)[:：]?\s*([^\n，。]+)/i);
+  if (matMatch) out.material = matMatch[1].trim();
+
+  // 价格
+  const priceMatch = t.match(/(?:价格|售价|京东价|天猫价|到手价)[:：]?\s*[¥￥$€]?\s*(\d+(?:\.\d+)?)/);
+  if (priceMatch) out.price = Number(priceMatch[1]);
+
+  // 颜色 / 尺码
+  const colorMatch = t.match(/(?:颜色|适用性别|颜色类别)[:：]?\s*([^\n，。]+)/i);
+  if (colorMatch) out.color = colorMatch[1].trim();
+  const sizeMatch = t.match(/(?:尺码|尺寸|size)[:：]?\s*([^\n，。]+)/i);
+  if (sizeMatch) out.size = sizeMatch[1].trim();
+
+  // 户外相关：保暖等级、季节、适用地形
+  const warmthMatch = t.match(/(?:保暖|厚度|warmth)[:：]?\s*(none|light|medium|heavy|无|轻|中|厚)/i);
+  if (warmthMatch) {
+    const map = { 无: 'none', 轻: 'light', 中: 'medium', 厚: 'heavy' };
+    out.warmth = map[warmthMatch[1]] || warmthMatch[1].toLowerCase();
+  }
+  const seasonMatch = t.match(/(?:季节|seasons?)[:：]?\s*([^\n，。]+)/i);
+  if (seasonMatch) {
+    out.seasons = seasonMatch[1].split(/[,，/、]/).map((s) => s.trim()).filter(Boolean);
+  }
+  const terrainMatch = t.match(/(?:地形|terrain)[:：]?\s*([^\n，。]+)/i);
+  if (terrainMatch) {
+    out.terrain = terrainMatch[1].split(/[,，/、]/).map((s) => s.trim()).filter(Boolean);
+  }
+
+  return out;
+}
+
+/** 创建并显示一个模态弹窗。返回关闭函数。 */
+function showModal(title, contentNode, buttons = []) {
+  const overlay = el('div', { class: 'modal-overlay' });
+  const box = el('div', { class: 'modal-box' });
+  const header = el('div', { class: 'modal-header' },
+    el('span', {}, title),
+    el('button', { class: 'modal-close', 'aria-label': '关闭' }, '×')
+  );
+  const body = el('div', { class: 'modal-body' });
+  body.appendChild(contentNode);
+  const footer = el('div', { class: 'modal-footer' });
+
+  box.appendChild(header);
+  box.appendChild(body);
+  if (buttons.length) box.appendChild(footer);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  const closeBtn = $('.modal-close', overlay);
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  for (const b of buttons) {
+    // 底部按钮默认点击关闭弹窗；调用方可额外绑定自己的逻辑
+    b.addEventListener('click', close);
+  }
+
+  return close;
+}
+
+/** 把两个对象浅合并：src 非 null 字段覆盖 dst。 */
+function mergeGearData(dst, src) {
+  const out = { ...dst };
+  for (const [k, v] of Object.entries(src)) {
+    if (v != null && v !== '') out[k] = v;
+  }
+  return out;
+}
+
+/** 把扁平对象重新包成 Edge Function 保存 gear 时需要的 { data, raw_markdown? } 结构。 */
+function packGearPayload(data) {
+  const copy = { ...data };
+  delete copy.slug;
+  delete copy._raw_markdown;
+  delete copy._updated_at;
+  delete copy._path;
+  return { data: copy };
+}
+
+/** 从装备对象里取出可用的商品 URL。 */
+function getGearSourceUrl(g) {
+  return g.source_url || g.url || g.link || g.purchase_url || '';
+}
+
+/** 把装备数据渲染成只读键值列表。 */
+function gearFactList(g) {
+  const facts = [
+    ['slug', g.slug],
+    ['名称', g.name],
+    ['类别', g.category],
+    ['类型', g.type],
+    ['品牌', g.brand],
+    ['型号', g.model],
+    ['重量', g.weight_g != null ? num(g.weight_g, 0) + ' g' : null],
+    ['防水', g.waterproof === true ? '是' : g.waterproof === false ? '否' : null],
+    ['透气', g.breathable === true ? '是' : g.breathable === false ? '否' : null],
+    ['材质', g.material],
+    ['保暖', g.warmth],
+    ['季节', Array.isArray(g.seasons) ? g.seasons.join('、') : g.seasons],
+    ['地形', Array.isArray(g.terrain) ? g.terrain.join('、') : g.terrain],
+    ['使用次数', g.usage_count],
+    ['状态', g.condition],
+    ['价格', g.price != null ? '¥' + num(g.price, 0) : null],
+    ['颜色', g.color],
+    ['尺码', g.size],
+    ['备注', g.notes],
+    ['商品链接', g.source_url],
+  ].filter(([, v]) => v != null && v !== '');
+
+  const list = el('ul', { class: 'detail-list' });
+  for (const [k, v] of facts) {
+    const li = el('li', {}, el('strong', {}, k + '：'));
+    if (k === '商品链接' && String(v).startsWith('http')) {
+      li.appendChild(el('a', { href: v, target: '_blank', rel: 'noopener' }, v));
+    } else {
+      li.appendChild(document.createTextNode(v));
+    }
+    list.appendChild(li);
+  }
+  return list;
+}
+
+/** 通用消息提示。 */
+function toast(msg, type = 'info') {
+  const t = el('div', { class: `toast toast-${type}` }, msg);
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 250);
+  }, 3000);
 }
 
 /** 把 export 返回的 DB 行 {slug/date, data, raw_markdown} 解包成扁平结构，对齐脚本侧 _unwrap。 */
@@ -69,6 +230,34 @@ function num(v, digits = 1) {
 function fmtDate(d) {
   if (!d) return '—';
   return String(d).slice(0, 10);
+}
+
+/** 把小时数格式化为 HH:MM:SS，用于跑步等需要精确到秒的场景。 */
+function fmtDuration(hours) {
+  if (hours == null || isNaN(Number(hours))) return '—';
+  const totalSec = Math.round(Number(hours) * 3600);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${m}:${pad(s)}`;
+}
+
+/** 计算配速（分钟/公里）。 */
+function paceMinPerKm(distanceKm, hours) {
+  const d = Number(distanceKm);
+  const t = Number(hours);
+  if (!d || !t || d <= 0 || t <= 0) return null;
+  const minPerKm = (t * 60) / d;
+  const m = Math.floor(minPerKm);
+  const s = Math.round((minPerKm - m) * 60);
+  return `${m}:${String(s).padStart(2, '0')}/km`;
+}
+
+/** 判断活动是否为跑步。 */
+function isRunning(a) {
+  return /run|跑步|配速/i.test(String(a.type || ''));
 }
 
 // ---------- 网络 ----------
@@ -128,6 +317,40 @@ async function fetchExport(apiUrl, token) {
   return res.json();
 }
 
+async function fetchSaveGear(apiUrl, token, slug, data) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  }, 15000, '保存装备');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`保存装备失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+async function fetchScrapeGear(apiUrl, token, url) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/scrape/gear`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ url }),
+  }, 30000, '抓取装备信息');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`抓取失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
 // ---------- 登录流程 ----------
 
 function loadConfig() {
@@ -157,29 +380,50 @@ function showAuthError(msg) {
 }
 
 async function connect(apiUrl, secret, remember) {
+  console.log('🔵 [connect] 开始，来源=' + (new Error().stack || '').split('\n')[2]?.trim());
   const btn = $('#connect-btn');
   btn.disabled = true;
   btn.textContent = '连接中…';
   $('#auth-error').hidden = true;
+  // 关键：一进入连接就立刻切到"纯加载态"——藏登录框、藏看板、只显 spinner。
+  // 否则 auth+export 的几秒网络往返期间，#auth-screen 仍亮着且 #loading 浮层叠加，
+  // 会出现"登录框 + 转圈 + 上一轮数据"三者同框（用户截图定格的正是这个中间态）。
+  $('#auth-screen').hidden = true;
+  $('#app').hidden = true;
+  $('#loading').hidden = false;
+  console.log('🟢 [connect] 已切纯加载态 → ' + dbgState());
   try {
+    console.log('🔵 [connect] 请求 token…');
     const token = await fetchToken(apiUrl, secret);
+    console.log('🟢 [connect] 拿到 token，长度=' + (token ? token.length : 0));
     state.apiUrl = apiUrl;
     state.token = token;
     if (remember) saveConfig(apiUrl, secret);
     else clearConfig();
     await loadAndRender();
+    console.log('🟢 [connect] loadAndRender 完成 → ' + dbgState());
     // UI 切换已收进 loadAndRender 的 showDashboard()，此处无需重复
   } catch (err) {
+    console.log('🔴 [connect] 失败: ' + (err && err.message ? err.message : err));
     // 失败必须复位到干净的登录态：关掉 spinner、露出登录框、显示错误。
     // 否则会出现"spinner 卡着 / 登录框和加载浮层同时盖着"的观感。
     $('#loading').hidden = true;
     $('#app').hidden = true;
     $('#auth-screen').hidden = false;
+    console.log('🟡 [connect] 已复位登录态 → ' + dbgState());
     showAuthError(err.message || String(err));
   } finally {
     btn.disabled = false;
     btn.textContent = '连接';
   }
+}
+
+/** 调试用：一行输出当前三态 hidden，方便在 Console 里对照。 */
+function dbgState() {
+  const a = $('#auth-screen'), p = $('#app'), l = $('#loading');
+  return 'auth-screen.hidden=' + (a ? a.hidden : 'nil') +
+         ' | app.hidden=' + (p ? p.hidden : 'nil') +
+         ' | loading.hidden=' + (l ? l.hidden : 'nil');
 }
 
 // ---------- 加载 + 渲染 ----------
@@ -190,14 +434,17 @@ function showDashboard() {
   $('#auth-screen').hidden = true;
   $('#app').hidden = false;
   $('#loading').hidden = true;
+  console.log('🟢 [showDashboard] 已切看板 → ' + dbgState());
 }
 
 async function loadAndRender(isRefresh = false) {
+  console.log('🔵 [loadAndRender] 开始 isRefresh=' + isRefresh);
   const loading = $('#loading');
   loading.hidden = false;
   $('#sync-status').textContent = '';
   try {
     const raw = await fetchExport(state.apiUrl, state.token);
+    console.log('🟢 [loadAndRender] 拿到数据 gear=' + (raw.gear ? raw.gear.length : '?') + ' activities=' + (raw.activities ? raw.activities.length : '?'));
     state.data = {
       profile: unwrap(raw.profile),
       gear: unwrapList(raw.gear),
@@ -315,34 +562,60 @@ function statCard(label, value, unit) {
 function activityTable(acts) {
   const wrap = el('div', { class: 'table-wrap' });
   const table = el('table');
-  table.appendChild(el('thead', {}, el('tr', {},
+  const headerCells = [
     el('th', {}, '日期'), el('th', {}, '路线'), el('th', {}, '类型'),
-    el('th', {}, '距离'), el('th', {}, '爬升'), el('th', {}, '时长'),
-    el('th', {}, '平均心率'), el('th', {}, '感受'),
-  )));
+    el('th', {}, '距离'), el('th', {}, '爬升'),
+  ];
+  // 跑步显示精确时长 + 配速；徒步/爬山显示普通时长
+  const hasRun = acts.some(isRunning);
+  headerCells.push(el('th', {}, '时长'));
+  if (hasRun) headerCells.push(el('th', {}, '配速'));
+  headerCells.push(el('th', {}, '平均心率'), el('th', {}, '感受'));
+  table.appendChild(el('thead', {}, el('tr', {}, ...headerCells)));
+
   const tbody = el('tbody');
   for (const a of acts) {
-    tbody.appendChild(el('tr', {},
+    const running = isRunning(a);
+    const pace = running ? paceMinPerKm(a.distance_km, a.duration_hours) : null;
+    const duration = running ? fmtDuration(a.duration_hours) : num(a.duration_hours) + ' h';
+    const cells = [
       el('td', {}, fmtDate(a.date)),
       el('td', {}, a.route || '—'),
       el('td', {}, a.type || '—'),
       el('td', { class: 'num' }, num(a.distance_km) + ' km'),
       el('td', { class: 'num' }, num(a.elevation_gain_m, 0) + ' m'),
-      el('td', { class: 'num' }, num(a.duration_hours) + ' h'),
+      el('td', { class: 'num' }, duration),
+    ];
+    if (hasRun) cells.push(el('td', { class: 'num' }, pace || '—'));
+    cells.push(
       el('td', { class: 'num' }, a.avg_hr ? num(a.avg_hr, 0) : '—'),
-      el('td', {}, feltBadge(a.felt)),
-    ));
+      el('td', {}, feltStars(a.felt))
+    );
+    tbody.appendChild(el('tr', {}, ...cells));
   }
   table.appendChild(tbody);
   wrap.appendChild(table);
   return wrap;
 }
 
-function feltBadge(felt) {
-  if (!felt) return '—';
-  const cls = felt === 'hard' || felt === 'extreme' ? 'hard'
-    : felt === 'moderate' ? 'moderate' : 'easy';
-  return el('span', { class: 'badge ' + cls }, felt);
+function feltStars(felt) {
+  const map = { easy: 1, moderate: 2, hard: 3, 'very hard': 4, extreme: 5 };
+  const n = map[String(felt || '').toLowerCase().trim()] || 0;
+  if (!n) return '—';
+  const filled = '★'.repeat(n);
+  const empty = '☆'.repeat(5 - n);
+  return el('span', { class: 'stars', title: felt }, filled + empty);
+}
+
+function activityTypeGroup(type) {
+  const t = String(type || '').toLowerCase();
+  if (/run|跑步|配速/.test(t)) return 'running';
+  if (/hike|hiking|徒步|爬山|登山|trail/.test(t)) return 'hiking';
+  return 'other';
+}
+
+function activityGroupLabel(group) {
+  return { running: '🏃 跑步', hiking: '🥾 徒步/爬山', other: '📌 其他' }[group] || '📌 其他';
 }
 
 function renderActivities() {
@@ -350,7 +623,24 @@ function renderActivities() {
   const view = viewEl('activities');
   view.innerHTML = '';
   view.appendChild(el('div', { class: 'section-title' }, `🏃 全部活动（${acts.length}）`));
-  view.appendChild(acts.length ? activityTable(acts) : el('div', { class: 'empty' }, '暂无活动记录'));
+
+  if (!acts.length) {
+    view.appendChild(el('div', { class: 'empty' }, '暂无活动记录'));
+    return;
+  }
+
+  const groups = { running: [], hiking: [], other: [] };
+  for (const a of acts) {
+    const g = activityTypeGroup(a.type);
+    groups[g].push(a);
+  }
+
+  for (const key of ['running', 'hiking', 'other']) {
+    const list = groups[key];
+    if (!list.length) continue;
+    view.appendChild(el('div', { class: 'subsection-title' }, `${activityGroupLabel(key)}（${list.length}）`));
+    view.appendChild(activityTable(list));
+  }
 }
 
 // ---------- 身体趋势（canvas 折线） ----------
@@ -478,27 +768,158 @@ function renderGear() {
     return;
   }
 
-  const wrap = el('div', { class: 'table-wrap' });
-  const table = el('table');
-  table.appendChild(el('thead', {}, el('tr', {},
-    el('th', {}, '名称'), el('th', {}, '类别'), el('th', {}, '品牌'),
-    el('th', {}, '重量'), el('th', {}, '防水'), el('th', {}, '使用次数'), el('th', {}, '状态'),
-  )));
-  const tbody = el('tbody');
+  // 按 category 分组
+  const groups = new Map();
   for (const g of gear) {
-    tbody.appendChild(el('tr', {},
-      el('td', {}, g.name || g.slug || '—'),
-      el('td', {}, el('span', { class: 'badge' }, g.category || '—')),
-      el('td', {}, g.brand || '—'),
-      el('td', { class: 'num' }, g.weight_g != null ? num(g.weight_g, 0) + ' g' : '—'),
-      el('td', {}, g.waterproof === true ? '✓' : g.waterproof === false ? '—' : '?'),
-      el('td', { class: 'num' }, g.usage_count != null ? num(g.usage_count, 0) : '0'),
-      el('td', {}, g.condition || '—'),
-    ));
+    const cat = g.category || '未分类';
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(g);
   }
-  table.appendChild(tbody);
-  wrap.appendChild(table);
-  view.appendChild(wrap);
+
+  for (const [cat, items] of groups) {
+    const group = el('div', { class: 'gear-group' });
+    const header = el('div', { class: 'gear-group-header' },
+      el('span', {}, categoryLabel(cat)),
+      el('span', { class: 'gear-count' }, `${items.length} 件`)
+    );
+    const body = el('div', { class: 'gear-group-body' });
+
+    for (const g of items) {
+      const card = el('div', { class: 'gear-card' });
+      const main = el('div', { class: 'gear-card-main' });
+      main.appendChild(el('div', { class: 'gear-name' }, g.name || g.slug || '—'));
+      main.appendChild(el('div', { class: 'gear-brief' },
+        [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, g.condition]
+          .filter(Boolean).join(' · ') || '—'
+      ));
+      const actions = el('div', { class: 'gear-card-actions' });
+      actions.appendChild(el('button', { class: 'btn-sm', 'data-action': 'detail' }, '详情'));
+      actions.appendChild(el('button', { class: 'btn-sm btn-primary', 'data-action': 'update' }, '更新'));
+
+      card.appendChild(main);
+      card.appendChild(actions);
+      body.appendChild(card);
+
+      // 事件绑定
+      $('.btn-sm[data-action="detail"]', card).addEventListener('click', () => openGearDetail(g));
+      $('.btn-sm[data-action="update"]', card).addEventListener('click', () => openGearUpdate(g));
+    }
+
+    header.addEventListener('click', () => {
+      const hidden = body.classList.toggle('collapsed');
+      header.classList.toggle('collapsed', hidden);
+    });
+
+    group.appendChild(header);
+    group.appendChild(body);
+    view.appendChild(group);
+  }
+}
+
+function categoryLabel(cat) {
+  const map = {
+    shoes: '👟 鞋类', backpack: '🎒 背包', jacket: '🧥 夹克/外套',
+    pants: '👖 裤子', poles: '🦯 登山杖', light: '🔦 照明',
+    sleeping: '🛏️ 睡眠系统', cooking: '🍳 炊具', electronics: '🔋 电子/导航',
+    firstaid: '🩹 急救/安全', hydration: '💧 水具', accessory: '🔧 配件/其他',
+  };
+  return map[String(cat).toLowerCase()] || `📦 ${cat}`;
+}
+
+function openGearDetail(g) {
+  const wrap = el('div', {});
+  wrap.appendChild(gearFactList(g));
+  showModal(g.name || g.slug || '装备详情', wrap, [el('button', { class: 'btn', 'data-action': 'close' }, '关闭')]);
+}
+
+async function openGearUpdate(g) {
+  const sourceUrl = getGearSourceUrl(g);
+  const content = el('div', {});
+
+  // 上部：网络抓取
+  const urlRow = el('div', { class: 'form-row' },
+    el('label', {}, '商品 URL（REI / 品牌官网等）'),
+    el('input', { id: 'update-url', type: 'url', value: sourceUrl, placeholder: 'https://www.rei.com/product/...' })
+  );
+  const scrapeBtn = el('button', { class: 'btn btn-primary' }, '🔍 从网页抓取');
+  const scrapeResult = el('div', { class: 'scrape-result' });
+
+  scrapeBtn.addEventListener('click', async () => {
+    const url = $('#update-url').value.trim();
+    if (!url) { toast('请先填写商品 URL', 'warn'); return; }
+    scrapeBtn.disabled = true;
+    scrapeBtn.textContent = '抓取中…';
+    scrapeResult.innerHTML = '';
+    try {
+      const data = await fetchScrapeGear(state.apiUrl, state.token, url);
+      const merged = mergeGearData(g, { ...data, source_url: url });
+      renderScrapeResult(scrapeResult, merged, g);
+    } catch (err) {
+      scrapeResult.appendChild(el('div', { class: 'error-text' }, err.message || '抓取失败'));
+    } finally {
+      scrapeBtn.disabled = false;
+      scrapeBtn.textContent = '🔍 从网页抓取';
+    }
+  });
+
+  // 下部：粘贴规格文本
+  const pasteLabel = el('label', {}, '或粘贴商品规格文本（京东/天猫详情页复制即可）');
+  const pasteArea = el('textarea', { id: 'update-spec', rows: 6, placeholder: '重量：380g\n面料：GORE-TEX 3L\n…' });
+  const parseBtn = el('button', { class: 'btn' }, '📋 解析粘贴文本');
+  const pasteResult = el('div', { class: 'scrape-result' });
+
+  parseBtn.addEventListener('click', () => {
+    const text = $('#update-spec').value.trim();
+    if (!text) { toast('请先粘贴规格文本', 'warn'); return; }
+    const parsed = parseSpecText(text);
+    const merged = mergeGearData(g, parsed);
+    renderScrapeResult(pasteResult, merged, g);
+  });
+
+  content.appendChild(urlRow);
+  content.appendChild(scrapeBtn);
+  content.appendChild(scrapeResult);
+  content.appendChild(el('hr', { class: 'modal-divider' }));
+  content.appendChild(pasteLabel);
+  content.appendChild(pasteArea);
+  content.appendChild(parseBtn);
+  content.appendChild(pasteResult);
+
+  showModal(g.name || g.slug || '更新装备', content, []);
+}
+
+function renderScrapeResult(container, merged, original) {
+  container.innerHTML = '';
+  const title = el('div', { class: 'section-title' }, '抓取结果（确认后保存）');
+  container.appendChild(title);
+  container.appendChild(gearFactList(merged));
+
+  const changed = [];
+  for (const k of Object.keys(merged)) {
+    if (JSON.stringify(merged[k]) !== JSON.stringify(original[k])) changed.push(k);
+  }
+  if (!changed.length) {
+    container.appendChild(el('div', { class: 'empty' }, '没有识别到新字段，请尝试粘贴更完整的规格文本。'));
+    return;
+  }
+
+  const saveBtn = el('button', { class: 'btn btn-primary' }, `💾 保存（更新 ${changed.length} 个字段）`);
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      await fetchSaveGear(state.apiUrl, state.token, original.slug, packGearPayload(merged));
+      toast('保存成功，正在刷新…', 'success');
+      await loadAndRender(true);
+      // 关闭所有 modal（简单做法）
+      $$('.modal-overlay').forEach((m) => m.remove());
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = `💾 保存（更新 ${changed.length} 个字段）`;
+    }
+  });
+  container.appendChild(saveBtn);
 }
 
 // ---------- 路线 ----------
@@ -520,24 +941,60 @@ function renderRoutes() {
   table.appendChild(el('thead', {}, el('tr', {},
     el('th', {}, '名称'), el('th', {}, '地点'), el('th', {}, '距离'),
     el('th', {}, '爬升'), el('th', {}, '难度'), el('th', {}, '预计时长'),
+    el('th', {}, '操作'),
   )));
   const tbody = el('tbody');
   for (const r of routes) {
     const diff = r.difficulty;
     const cls = diff === 'hard' || diff === 'extreme' ? 'hard'
       : diff === 'moderate' ? 'moderate' : 'easy';
-    tbody.appendChild(el('tr', {},
+    const tr = el('tr', { class: 'route-row' },
       el('td', {}, r.name || r.slug || '—'),
       el('td', {}, r.location || '—'),
       el('td', { class: 'num' }, num(r.distance_km) + ' km'),
       el('td', { class: 'num' }, num(r.elevation_gain_m, 0) + ' m'),
       el('td', {}, diff ? el('span', { class: 'badge ' + cls }, diff) : '—'),
       el('td', { class: 'num' }, r.estimated_hours != null ? num(r.estimated_hours) + ' h' : '—'),
-    ));
+      el('td', {}, el('button', { class: 'btn-sm', 'data-action': 'detail' }, '详情'))
+    );
+    $('.btn-sm[data-action="detail"]', tr).addEventListener('click', () => openRouteDetail(r));
+    tbody.appendChild(tr);
   }
   table.appendChild(tbody);
   wrap.appendChild(table);
   view.appendChild(wrap);
+}
+
+function openRouteDetail(r) {
+  const facts = [
+    ['slug', r.slug],
+    ['名称', r.name],
+    ['地点', r.location],
+    ['距离', r.distance_km != null ? num(r.distance_km) + ' km' : null],
+    ['爬升', r.elevation_gain_m != null ? num(r.elevation_gain_m, 0) + ' m' : null],
+    ['下降', r.elevation_loss_m != null ? num(r.elevation_loss_m, 0) + ' m' : null],
+    ['最高海拔', r.max_altitude_m != null ? num(r.max_altitude_m, 0) + ' m' : null],
+    ['难度', r.difficulty],
+    ['预计时长', r.estimated_hours != null ? num(r.estimated_hours) + ' h' : null],
+    ['地形', Array.isArray(r.terrain) ? r.terrain.join('、') : r.terrain],
+    ['最佳季节', Array.isArray(r.best_seasons) ? r.best_seasons.join('、') : r.best_seasons],
+    ['水源', Array.isArray(r.water_sources) ? r.water_sources.join('、') : r.water_sources],
+    ['GPX', r.gpx_file],
+    ['来源', r.source_url],
+    ['备注', r.notes],
+  ].filter(([, v]) => v != null && v !== '');
+
+  const list = el('ul', { class: 'detail-list' });
+  for (const [k, v] of facts) {
+    const li = el('li', {}, el('strong', {}, k + '：'));
+    if ((k === '来源' || k === 'GPX') && String(v).startsWith('http')) {
+      li.appendChild(el('a', { href: v, target: '_blank', rel: 'noopener' }, v));
+    } else {
+      li.appendChild(document.createTextNode(v));
+    }
+    list.appendChild(li);
+  }
+  showModal(r.name || r.slug || '路线详情', list, [el('button', { class: 'btn' }, '关闭')]);
 }
 
 // ---------- 计划 ----------
@@ -621,8 +1078,14 @@ function init() {
   // 只要框里预填了值也自动连，避免用户以为填了就行、却停在登录框干等。
   const preUrl = $('#api-url').value.trim();
   const preSecret = $('#api-secret').value.trim();
+  console.log('🔵 [init] DOM就绪 初始三态 → ' + dbgState() +
+    ' | 预填 url=' + (preUrl ? '有' : '无') + ' secret=' + (preSecret ? '有(len=' + preSecret.length + ')' : '无') +
+    ' | localStorage=' + (loadConfig() ? '有配置' : '空'));
   if (preUrl && preSecret) {
+    console.log('🟢 [init] 触发自动连接');
     connect(preUrl, preSecret, $('#remember').checked);
+  } else {
+    console.log('🟡 [init] 不自动连接，停在登录框等手动点击');
   }
 
   // 注册 service worker（PWA）
