@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v3-2026-07-01';
+const APP_VERSION = 'v4-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 
 const LS_KEY = 'outdoor-dashboard-config';
@@ -170,6 +170,11 @@ async function connect(apiUrl, secret, remember) {
     await loadAndRender();
     // UI 切换已收进 loadAndRender 的 showDashboard()，此处无需重复
   } catch (err) {
+    // 失败必须复位到干净的登录态：关掉 spinner、露出登录框、显示错误。
+    // 否则会出现"spinner 卡着 / 登录框和加载浮层同时盖着"的观感。
+    $('#loading').hidden = true;
+    $('#app').hidden = true;
+    $('#auth-screen').hidden = false;
     showAuthError(err.message || String(err));
   } finally {
     btn.disabled = false;
@@ -608,11 +613,16 @@ function init() {
     $('#api-secret').value = '';
     $('#app').hidden = true;
     $('#auth-screen').hidden = false;
+    $('#loading').hidden = true;
   });
 
-  // 已记住密钥则自动连接
-  if (saved && saved.apiUrl && saved.secret) {
-    connect(saved.apiUrl, saved.secret, true);
+  // 自动连接：只要输入框里已有 API 地址 + 密钥就尝试连一次。
+  // 不只看 localStorage——即便密钥还没被「记住」（saveConfig 未跑过），
+  // 只要框里预填了值也自动连，避免用户以为填了就行、却停在登录框干等。
+  const preUrl = $('#api-url').value.trim();
+  const preSecret = $('#api-secret').value.trim();
+  if (preUrl && preSecret) {
+    connect(preUrl, preSecret, $('#remember').checked);
   }
 
   // 注册 service worker（PWA）
