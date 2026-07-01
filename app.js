@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v11-2026-07-01';
+const APP_VERSION = 'v12-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -778,21 +778,55 @@ function renderGear() {
     String(a.slug || '').localeCompare(String(b.slug || '')));
   const view = viewEl('gear');
   view.innerHTML = '';
-  view.appendChild(el('div', { class: 'section-title' }, `🎒 装备库（${gear.length}）`));
+
+  // 顶部标题 + AI 添加按钮
+  const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+    el('span', {}, `🎒 装备库（${gear.length}）`),
+    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-ai' }, '✨ AI 添加')
+  );
+  view.appendChild(headerRow);
+  $('.btn-sm[data-action="add-ai"]', headerRow).addEventListener('click', () => openAddGearByAi());
 
   if (!gear.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无装备'));
     return;
   }
 
-  // 按 category 分组
+  // 正常装备按 category 分组
+  const activeGear = gear.filter((g) => g.condition !== 'retired');
+  const retiredGear = gear.filter((g) => g.condition === 'retired');
+
+  renderGearGroups(view, activeGear, false);
+
+  // 淘汰装备单独区域，默认折叠
+  if (retiredGear.length) {
+    const retiredGroup = el('div', { class: 'gear-group retired-group' });
+    const retiredHeader = el('div', { class: 'gear-group-header collapsed' },
+      el('span', {}, `🗑 已淘汰（${retiredGear.length}）`),
+      el('span', { class: 'gear-count' }, '点击展开')
+    );
+    const retiredBody = el('div', { class: 'gear-group-body collapsed' });
+    for (const g of retiredGear) {
+      retiredBody.appendChild(buildGearCard(g));
+    }
+    retiredHeader.addEventListener('click', () => {
+      const hidden = retiredBody.classList.toggle('collapsed');
+      retiredHeader.classList.toggle('collapsed', hidden);
+    });
+    retiredGroup.appendChild(retiredHeader);
+    retiredGroup.appendChild(retiredBody);
+    view.appendChild(retiredGroup);
+  }
+}
+
+/** 渲染装备分类分组 */
+function renderGearGroups(container, gearList) {
   const groups = new Map();
-  for (const g of gear) {
+  for (const g of gearList) {
     const cat = g.category || '未分类';
     if (!groups.has(cat)) groups.set(cat, []);
     groups.get(cat).push(g);
   }
-
   for (const [cat, items] of groups) {
     const group = el('div', { class: 'gear-group' });
     const header = el('div', { class: 'gear-group-header' },
@@ -800,54 +834,54 @@ function renderGear() {
       el('span', { class: 'gear-count' }, `${items.length} 件`)
     );
     const body = el('div', { class: 'gear-group-body' });
-
-    for (const g of items) {
-      const card = el('div', { class: 'gear-card' });
-      const main = el('div', { class: 'gear-card-main' });
-      main.appendChild(el('div', { class: 'gear-name' }, g.name || g.slug || '—'));
-      main.appendChild(el('div', { class: 'gear-brief' },
-        [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, g.condition]
-          .filter(Boolean).join(' · ') || '—'
-      ));
-      const actions = el('div', { class: 'gear-card-actions' });
-      actions.appendChild(el('button', { class: 'btn-sm', 'data-action': 'detail' }, '详情'));
-      actions.appendChild(el('button', { class: 'btn-sm btn-primary', 'data-action': 'update' }, '更新'));
-      const isRetired = g.condition === 'retired';
-      const retireBtn = el('button', { class: 'btn-sm' + (isRetired ? ' btn-primary' : ''), 'data-action': isRetired ? 'restore' : 'retire' }, isRetired ? '↩ 恢复' : '🗑 淘汰');
-      actions.appendChild(retireBtn);
-
-      card.appendChild(main);
-      card.appendChild(actions);
-      body.appendChild(card);
-
-      // 事件绑定
-      $('.btn-sm[data-action="detail"]', card).addEventListener('click', () => openGearDetail(g));
-      $('.btn-sm[data-action="update"]', card).addEventListener('click', () => openGearUpdate(g));
-      retireBtn.addEventListener('click', async () => {
-        const nextCondition = isRetired ? 'good' : 'retired';
-        retireBtn.disabled = true;
-        retireBtn.textContent = isRetired ? '恢复中…' : '淘汰中…';
-        try {
-          await fetchSaveGear(state.apiUrl, state.token, g.slug, { ...g, condition: nextCondition });
-          toast(isRetired ? '已恢复装备' : '已淘汰装备', 'success');
-          await loadAndRender(true);
-        } catch (err) {
-          toast(err.message || '操作失败', 'error');
-          retireBtn.disabled = false;
-          retireBtn.textContent = isRetired ? '↩ 恢复' : '🗑 淘汰';
-        }
-      });
-    }
-
+    for (const g of items) body.appendChild(buildGearCard(g));
     header.addEventListener('click', () => {
       const hidden = body.classList.toggle('collapsed');
       header.classList.toggle('collapsed', hidden);
     });
-
     group.appendChild(header);
     group.appendChild(body);
-    view.appendChild(group);
+    container.appendChild(group);
   }
+}
+
+/** 构建单个装备卡片 */
+function buildGearCard(g) {
+  const card = el('div', { class: 'gear-card' + (g.condition === 'retired' ? ' gear-retired' : '') });
+  const main = el('div', { class: 'gear-card-main' });
+  main.appendChild(el('div', { class: 'gear-name' }, g.name || g.slug || '—'));
+  main.appendChild(el('div', { class: 'gear-brief' },
+    [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, g.condition]
+      .filter(Boolean).join(' · ') || '—'
+  ));
+  const actions = el('div', { class: 'gear-card-actions' });
+  actions.appendChild(el('button', { class: 'btn-sm', 'data-action': 'detail' }, '详情'));
+  actions.appendChild(el('button', { class: 'btn-sm btn-primary', 'data-action': 'update' }, '更新'));
+  const isRetired = g.condition === 'retired';
+  const retireBtn = el('button', { class: 'btn-sm' + (isRetired ? ' btn-primary' : ''), 'data-action': isRetired ? 'restore' : 'retire' }, isRetired ? '↩ 恢复' : '🗑 淘汰');
+  actions.appendChild(retireBtn);
+
+  card.appendChild(main);
+  card.appendChild(actions);
+
+  // 事件绑定
+  $('.btn-sm[data-action="detail"]', card).addEventListener('click', () => openGearDetail(g));
+  $('.btn-sm[data-action="update"]', card).addEventListener('click', () => openGearUpdate(g));
+  retireBtn.addEventListener('click', async () => {
+    const nextCondition = isRetired ? 'good' : 'retired';
+    retireBtn.disabled = true;
+    retireBtn.textContent = isRetired ? '恢复中…' : '淘汰中…';
+    try {
+      await fetchSaveGear(state.apiUrl, state.token, g.slug, { ...g, condition: nextCondition });
+      toast(isRetired ? '已恢复装备' : '已淘汰装备', 'success');
+      await loadAndRender(true);
+    } catch (err) {
+      toast(err.message || '操作失败', 'error');
+      retireBtn.disabled = false;
+      retireBtn.textContent = isRetired ? '↩ 恢复' : '🗑 淘汰';
+    }
+  });
+  return card;
 }
 
 function categoryLabel(cat) {
@@ -1002,14 +1036,64 @@ async function openGearUpdate(g) {
 function buildAiPrompt(g) {
   const parts = [];
   // 名称里通常已包含品牌/型号，避免重复；若名称缺失再用 brand/model 兜底
-  if (g.name) {
+  if (g && g.name) {
     parts.push(g.name);
-  } else {
+  } else if (g) {
     if (g.brand && g.model) parts.push(`${g.brand} ${g.model}`);
     else if (g.brand) parts.push(g.brand);
     else if (g.model) parts.push(g.model);
   }
   return parts.join(' ');
+}
+
+/** 生成 URL 安全的装备 slug，支持中英文混排 */
+function slugifyGear(name, brand, model) {
+  const raw = [brand, model, name].filter(Boolean).join(' ').trim().toLowerCase();
+  const slug = raw
+    .replace(/[^a-z0-9一-龥]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
+  return slug || 'gear-' + Date.now();
+}
+
+/** 通过 AI 添加新装备 */
+function openAddGearByAi() {
+  const content = el('div', {});
+  const resultArea = el('div', { class: 'scrape-result' });
+  const label = el('label', {}, '🤖 输入装备描述，AI 会自动识别名称、品牌、重量、材质等字段');
+  const textarea = el('textarea', { id: 'add-gear-ai', rows: 6, placeholder: '例如：始祖鸟 Beta LT 硬壳冲锋衣，黑色 M 码，GORE-TEX 面料，重约 350g，价格 4500 元' });
+  const actions = el('div', { class: 'gear-card-actions' });
+  const aiBtn = el('button', { class: 'btn btn-primary' }, '✨ AI 识别并生成');
+  actions.appendChild(aiBtn);
+
+  async function run() {
+    const text = textarea.value.trim();
+    if (!text) { toast('请先输入装备描述', 'warn'); return; }
+    aiBtn.disabled = true;
+    aiBtn.textContent = '识别中…';
+    resultArea.innerHTML = '';
+    try {
+      const res = await fetchAiGear(state.apiUrl, state.token, text);
+      if (!res.ok || !res.data) {
+        throw new Error(res.error || 'AI 未返回有效字段');
+      }
+      const merged = { ...res.data, condition: 'good' };
+      const slug = slugifyGear(merged.name, merged.brand, merged.model);
+      const original = { slug };
+      renderScrapeResult(resultArea, merged, original, res.provider);
+    } catch (err) {
+      resultArea.appendChild(el('div', { class: 'error-text' }, err.message || 'AI 识别失败'));
+    } finally {
+      aiBtn.disabled = false;
+      aiBtn.textContent = '✨ AI 识别并生成';
+    }
+  }
+
+  aiBtn.addEventListener('click', run);
+  content.appendChild(el('div', { class: 'form-row' }, label, textarea));
+  content.appendChild(actions);
+  content.appendChild(resultArea);
+  showModal('✨ AI 添加装备', content, []);
 }
 
 function renderScrapeResult(container, merged, original, provider) {

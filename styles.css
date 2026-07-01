@@ -472,10 +472,19 @@ textarea { resize: vertical; }
   font-size: 14px;
 }
 
-/* 子区块标题 */
-.subsection-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 22px 0 10px;
-  color: var(--text);
+/* 已淘汰装备区域 */
+.gear-group.retired-group .gear-group-header {
+  background: #2a2020;
+  color: #d4a3a3;
+}
+.gear-group.retired-group .gear-group-header:hover {
+  background: #362828;
+}
+.gear-card.gear-retired {
+  opacity: 0.65;
+  border-color: #5a3a3a;
+}
+.gear-card.gear-retired .gear-name {
+  text-decoration: line-through;
+  color: #c98b8b;
 }
