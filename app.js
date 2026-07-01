@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v18-2026-07-01';
+const APP_VERSION = 'v19-2026-07-01';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -128,6 +128,7 @@ function showModal(title, contentNode, buttons = []) {
 
   for (const b of buttons) {
     // 底部按钮默认点击关闭弹窗；带 data-no-autoclose 的按钮由调用方自行控制关闭时机
+    footer.appendChild(b);
     if (b.getAttribute && b.getAttribute('data-no-autoclose') != null) continue;
     b.addEventListener('click', close);
   }
