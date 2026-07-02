@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v22-2026-07-02';
+const APP_VERSION = 'v23-2026-07-02';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -2926,7 +2926,8 @@ function openRecommendGear(preselectedRoute) {
   const rainInput = el('input', { type: 'number', class: 'gear-select', value: '0', min: '0', max: '100', placeholder: '降水概率 %', style: 'flex:1;min-width:80px;' });
   const windInput = el('input', { type: 'number', class: 'gear-select', value: '10', placeholder: '最大风速 km/h', style: 'flex:1;min-width:80px;' });
   const uvInput = el('input', { type: 'number', class: 'gear-select', value: '5', placeholder: 'UV', style: 'flex:1;min-width:80px;' });
-  manualWeatherBox.append(tempLowInput, tempHighInput, rainInput, windInput, uvInput);
+  const summaryInput = el('input', { type: 'text', class: 'gear-select', value: '手动设置', placeholder: '天气简述', style: 'flex:1 1 100%;min-width:80px;' });
+  manualWeatherBox.append(tempLowInput, tempHighInput, rainInput, windInput, uvInput, summaryInput);
 
   function updateWeatherSource() {
     manualWeatherBox.style.display = weatherManual.checked ? 'flex' : 'none';
@@ -2961,11 +2962,12 @@ function openRecommendGear(preselectedRoute) {
     resultArea.innerHTML = '';
     if (!lastResult) return;
 
-    const { weather, backpack, total_weight_g, total_volume_l, risks, route } = lastResult;
+    const { weather, backpack, total_weight_g, total_volume_l, risks, route, days, consumables, weather_source } = lastResult;
 
     // 摘要卡片
     const summary = el('div', { class: 'recommend-summary card', style: 'margin-bottom:12px;padding:12px;' });
-    summary.appendChild(el('div', { class: 'section-title' }, `${weather.summary} · ${weather.temp_low_c}°C ~ ${weather.temp_high_c}°C`));
+    const weatherSourceLabel = weather_source === 'manual' ? '手动' : weather_source === 'fallback' ? '默认兜底' : '自动';
+    summary.appendChild(el('div', { class: 'section-title' }, `${weather.summary} · ${weather.temp_low_c}°C ~ ${weather.temp_high_c}°C · ${weatherSourceLabel}`));
     summary.appendChild(el('div', { class: 'rel-brief' }, `降水 ${weather.precipitation_chance}% · 风速 ${weather.wind_speed_kmh}km/h · UV ${weather.uv_index}`));
     if (backpack) {
       summary.appendChild(el('div', { class: 'rel-brief' }, `${backpack.name}（${backpack.capacity_l} L）：${backpack.reason}`));
@@ -2987,6 +2989,15 @@ function openRecommendGear(preselectedRoute) {
     const list = el('div', { class: 'rel-list' });
     resultArea.appendChild(list);
 
+    const dayLabel = (itemDays, totalDays) => {
+      if (!itemDays || itemDays.length === 0) return '每日';
+      const min = Math.min(...itemDays);
+      const max = Math.max(...itemDays);
+      if (min === 1 && max === totalDays && itemDays.length === totalDays) return '每日';
+      if (min >= 2) return `Day ${min}+`;
+      return `Day ${itemDays.join(',')}`;
+    };
+
     function updateTotals() {
       let w = 0, v = 0;
       for (const item of workingGear) {
@@ -2997,49 +3008,80 @@ function openRecommendGear(preselectedRoute) {
           v += Number(g.packed_volume_l) || 0;
         }
       }
+      for (const c of (consumables || [])) {
+        w += Number(c.weight_g) || 0;
+        v += Number(c.packed_volume_l) || 0;
+      }
       summary.querySelector('.rel-brief:last-child').textContent = `总重量 ${(w / 1000).toFixed(2)} kg · 总体积 ${v.toFixed(1)} L`;
     }
 
     function renderList() {
       list.innerHTML = '';
+      const groups = {};
       for (const item of workingGear) {
         const g = gearMap.get(item.currentSlug);
         if (!g) continue;
-        const row = el('div', { class: 'rel-item gear-edit-row' });
-        const cb = el('input', { type: 'checkbox' });
-        cb.checked = item.checked;
-        cb.addEventListener('change', () => { item.checked = cb.checked; updateTotals(); });
-
-        const info = el('div', { class: 'rel-info', style: 'flex:1;' });
-        info.appendChild(el('div', { class: 'rel-name' }, g.name || g.slug));
-        info.appendChild(el('div', { class: 'rel-brief' },
-          [g.weight_g ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category), item.originalSlug !== item.currentSlug ? '已替换' : null]
-            .filter(Boolean).join(' · ')));
-
-        // 替换下拉：同类别、在用、不是当前项
-        const subSel = el('select', { class: 'gear-select', style: 'min-width:120px;' },
-          el('option', { value: '' }, '替换为…')
-        );
-        const alternatives = (state.data.gear || [])
-          .filter((x) => x.category === g.category && x.condition !== 'retired' && x.slug !== item.currentSlug);
-        for (const alt of alternatives) {
-          subSel.appendChild(el('option', { value: alt.slug }, `${alt.name || alt.slug}${alt.weight_g ? ' (' + num(alt.weight_g, 0) + 'g)' : ''}`));
+        const label = dayLabel(item.days, days || 1);
+        groups[label] = groups[label] || [];
+        groups[label].push({ item, g });
+      }
+      const orderedLabels = Object.keys(groups).sort((a, b) => {
+        if (a === '每日') return -1;
+        if (b === '每日') return 1;
+        return a.localeCompare(b);
+      });
+      for (const label of orderedLabels) {
+        if ((days || 1) > 1) {
+          list.appendChild(el('div', { class: 'subsection-title', style: 'margin:8px 0 4px;' }, label));
         }
-        subSel.value = '';
-        subSel.addEventListener('change', () => {
-          if (!subSel.value) return;
-          item.currentSlug = subSel.value;
-          renderList();
-          updateTotals();
-        });
+        for (const { item, g } of groups[label]) {
+          const row = el('div', { class: 'rel-item gear-edit-row' });
+          const cb = el('input', { type: 'checkbox' });
+          cb.checked = item.checked;
+          cb.addEventListener('change', () => { item.checked = cb.checked; updateTotals(); });
 
-        row.appendChild(el('label', { style: 'display:flex;align-items:center;gap:10px;flex:1;' }, cb, info));
-        row.appendChild(subSel);
-        list.appendChild(row);
+          const info = el('div', { class: 'rel-info', style: 'flex:1;' });
+          info.appendChild(el('div', { class: 'rel-name' }, g.name || g.slug));
+          info.appendChild(el('div', { class: 'rel-brief' },
+            [g.weight_g ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category), item.originalSlug !== item.currentSlug ? '已替换' : null]
+              .filter(Boolean).join(' · ')));
+
+          // 替换下拉：同类别、在用、不是当前项
+          const subSel = el('select', { class: 'gear-select', style: 'min-width:120px;' },
+            el('option', { value: '' }, '替换为…')
+          );
+          const alternatives = (state.data.gear || [])
+            .filter((x) => x.category === g.category && x.condition !== 'retired' && x.slug !== item.currentSlug);
+          for (const alt of alternatives) {
+            subSel.appendChild(el('option', { value: alt.slug }, `${alt.name || alt.slug}${alt.weight_g ? ' (' + num(alt.weight_g, 0) + 'g)' : ''}`));
+          }
+          subSel.value = '';
+          subSel.addEventListener('change', () => {
+            if (!subSel.value) return;
+            item.currentSlug = subSel.value;
+            renderList();
+            updateTotals();
+          });
+
+          row.appendChild(el('label', { style: 'display:flex;align-items:center;gap:10px;flex:1;' }, cb, info));
+          row.appendChild(subSel);
+          list.appendChild(row);
+        }
       }
     }
 
     renderList();
+
+    // 消耗品
+    if (consumables && consumables.length) {
+      const consBox = el('div', { class: 'recommend-summary card', style: 'margin-top:12px;padding:12px;' });
+      consBox.appendChild(el('div', { class: 'subsection-title' }, '消耗品（按行程天数估算）'));
+      for (const c of consumables) {
+        consBox.appendChild(el('div', { class: 'rel-brief' },
+          `${c.name} · ${c.quantity} ${c.unit} · ${c.weight_g} g · ${Number(c.packed_volume_l).toFixed(1)} L · ${c.reason}`));
+      }
+      resultArea.appendChild(consBox);
+    }
 
     // 风险提醒
     if (risks && risks.length) {
@@ -3047,6 +3089,20 @@ function openRecommendGear(preselectedRoute) {
       for (const r of risks) riskBox.appendChild(el('div', {}, r));
       resultArea.appendChild(riskBox);
     }
+  }
+
+  function showWeatherFallbackModal(weather) {
+    return new Promise((resolve) => {
+      const content = el('div', {},
+        el('div', { class: 'error-text', style: 'margin-bottom:12px;' }, '自动天气获取失败，当前使用的是兜底天气。请手动输入或继续使用。'),
+        el('div', { class: 'rel-brief' }, `${weather.summary} · ${weather.temp_low_c}°C ~ ${weather.temp_high_c}°C · 降水 ${weather.precipitation_chance}% · 风速 ${weather.wind_speed_kmh}km/h · UV ${weather.uv_index}`)
+      );
+      const manualBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '手动输入并重新推荐');
+      const useBtn = el('button', { class: 'btn', 'data-no-autoclose': '1' }, '使用默认兜底');
+      manualBtn.addEventListener('click', () => { close(); resolve('manual'); });
+      useBtn.addEventListener('click', () => { close(); resolve('use'); });
+      const close = showModal('天气获取失败', content, [manualBtn, useBtn]);
+    });
   }
 
   async function runRecommend() {
@@ -3067,7 +3123,7 @@ function openRecommendGear(preselectedRoute) {
         precipitation_chance: Number(rainInput.value),
         wind_speed_kmh: Number(windInput.value),
         uv_index: Number(uvInput.value),
-        summary: '手动设置',
+        summary: summaryInput.value.trim() || '手动设置',
       };
     }
 
@@ -3077,10 +3133,28 @@ function openRecommendGear(preselectedRoute) {
     try {
       const res = await fetchRecommend(state.apiUrl, state.token, payload);
       if (!res.ok) throw new Error(res.error || '推荐失败');
+
+      if (res.weather_failed && weatherAuto.checked) {
+        const choice = await showWeatherFallbackModal(res.weather);
+        if (choice === 'manual') {
+          tempLowInput.value = res.weather.temp_low_c;
+          tempHighInput.value = res.weather.temp_high_c;
+          rainInput.value = res.weather.precipitation_chance;
+          windInput.value = res.weather.wind_speed_kmh;
+          uvInput.value = res.weather.uv_index;
+          summaryInput.value = '手动设置';
+          weatherManual.checked = true;
+          weatherAuto.checked = false;
+          updateWeatherSource();
+          await runRecommend();
+          return;
+        }
+      }
+
       lastResult = res;
-      workingGear = (res.gear || []).map((g) => ({ originalSlug: g.slug, currentSlug: g.slug, checked: true }));
+      workingGear = (res.gear || []).map((g) => ({ originalSlug: g.slug, currentSlug: g.slug, checked: true, days: g.days }));
       if (res.backpack) {
-        workingGear.push({ originalSlug: res.backpack.slug, currentSlug: res.backpack.slug, checked: true });
+        workingGear.push({ originalSlug: res.backpack.slug, currentSlug: res.backpack.slug, checked: true, days: null });
       }
       renderResult();
       saveBtn.disabled = false;
@@ -3115,6 +3189,7 @@ function openRecommendGear(preselectedRoute) {
       estimated_hours: lastResult.route.estimated_hours,
       days: Number(daysInput.value) || 1,
       weather: lastResult.weather,
+      weather_source: lastResult.weather_source,
       gear_recommended: slugs,
       backpack_recommended: lastResult.backpack ? lastResult.backpack.slug : null,
       total_weight_g: lastResult.total_weight_g,
@@ -3283,11 +3358,13 @@ function renderPlans() {
       ['距离', p.distance_km != null ? p.distance_km + ' km' : null],
       ['爬升', p.elevation_gain_m != null ? p.elevation_gain_m + ' m' : null],
       ['预计时长', p.estimated_hours != null ? p.estimated_hours + ' h' : null],
+      ['天数', p.days != null ? p.days + ' 天' : null],
       ['恢复天数', p.recovery_days != null ? p.recovery_days + ' 天' : null],
       ['强度', p.intensity_level],
       ['总重量', p.total_weight_g != null ? (p.total_weight_g / 1000).toFixed(2) + ' kg' : null],
       ['总体积', p.total_volume_l != null ? Number(p.total_volume_l).toFixed(1) + ' L' : null],
       ['装备数', Array.isArray(p.gear_recommended) ? p.gear_recommended.length + ' 件' : null],
+      ['天气来源', p.plan_type !== 'recovery' && p.weather_source ? { auto: '自动', manual: '手动', fallback: '默认兜底' }[p.weather_source] : null],
     ].filter(([, v]) => v != null && v !== '');
     for (const [k, v] of facts) {
       card.appendChild(el('div', {}, el('span', { class: 'badge' }, k), ' ', String(v)));
