@@ -231,6 +231,133 @@ function packActivityData(activity, slugs) {
   return copy;
 }
 
+/** 弹窗手动添加一条活动记录。 */
+function openAddActivity() {
+  if (!state.token) { toast('请先连接后再添加活动', 'warn'); return; }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const routeSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: '' }, '（无路线 / 手动输入）')
+  );
+  const routes = [...(state.data.routes || [])].sort((a, b) => String(a.name || a.slug).localeCompare(String(b.name || b.slug)));
+  for (const r of routes) {
+    routeSel.appendChild(el('option', { value: r.name }, r.name || r.slug));
+  }
+
+  const dateInput = el('input', { type: 'date', class: 'gear-select', value: today, style: 'width:100%;' });
+  const routeInput = el('input', { type: 'text', class: 'gear-select', placeholder: '路线名称', style: 'width:100%;' });
+  const typeSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: 'running' }, '路跑 running'),
+    el('option', { value: 'trail_running' }, '越野跑 trail_running'),
+    el('option', { value: 'hiking', selected: 'selected' }, '徒步 hiking'),
+    el('option', { value: 'climbing' }, '攀岩 climbing'),
+    el('option', { value: 'cycling' }, '骑行 cycling'),
+    el('option', { value: 'other' }, '其他 other')
+  );
+  const distInput = el('input', { type: 'number', class: 'gear-select', value: '', step: '0.01', placeholder: '公里', style: 'width:100%;' });
+  const gainInput = el('input', { type: 'number', class: 'gear-select', value: '', placeholder: '米', style: 'width:100%;' });
+  const lossInput = el('input', { type: 'number', class: 'gear-select', value: '', placeholder: '米（可选）', style: 'width:100%;' });
+  const durationInput = el('input', { type: 'number', class: 'gear-select', value: '', step: '0.01', placeholder: '小时', style: 'width:100%;' });
+  const hrInput = el('input', { type: 'number', class: 'gear-select', value: '', placeholder: '次/分', style: 'width:100%;' });
+  const feltSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: '' }, '（未选择）'),
+    el('option', { value: 'easy' }, '轻松 easy'),
+    el('option', { value: 'moderate' }, '适中 moderate'),
+    el('option', { value: 'hard' }, '辛苦 hard'),
+    el('option', { value: 'extreme' }, '极限 extreme')
+  );
+  const notesInput = el('textarea', { class: 'gear-select', rows: 3, placeholder: '备注、膝盖状态、装备反馈等', style: 'width:100%;' });
+
+  function updateRouteInput() {
+    if (routeSel.value) {
+      routeInput.value = routeSel.value;
+      routeInput.disabled = true;
+    } else {
+      routeInput.disabled = false;
+    }
+  }
+  routeSel.addEventListener('change', updateRouteInput);
+
+  const form = el('div', { class: 'recommend-form' },
+    el('div', { class: 'form-row' }, el('label', {}, '日期 *'), dateInput),
+    el('div', { class: 'form-row' }, el('label', {}, '路线'), el('div', {}, routeSel, routeInput)),
+    el('div', { class: 'form-row' }, el('label', {}, '类型 *'), typeSel),
+    el('div', { class: 'form-row' }, el('label', {}, '距离 (km) *'), distInput),
+    el('div', { class: 'form-row' }, el('label', {}, '爬升 (m)'), gainInput),
+    el('div', { class: 'form-row' }, el('label', {}, '下降 (m)'), lossInput),
+    el('div', { class: 'form-row' }, el('label', {}, '时长 (h)'), durationInput),
+    el('div', { class: 'form-row' }, el('label', {}, '平均心率'), hrInput),
+    el('div', { class: 'form-row' }, el('label', {}, '感受'), feltSel),
+    el('div', { class: 'form-row' }, el('label', {}, '备注'), notesInput)
+  );
+
+  const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '💾 保存活动');
+  saveBtn.addEventListener('click', async () => {
+    const date = dateInput.value;
+    const route = routeInput.value.trim();
+    const type = typeSel.value;
+    const distance = Number(distInput.value);
+    if (!date || !route || isNaN(distance) || distance <= 0) {
+      toast('请填写日期、路线和有效距离', 'warn');
+      return;
+    }
+    const data = {
+      date,
+      route,
+      type,
+      distance_km: distance,
+      elevation_gain_m: Number(gainInput.value) || 0,
+      elevation_loss_m: Number(lossInput.value) || 0,
+      duration_hours: Number(durationInput.value) || undefined,
+      avg_hr: hrInput.value ? Number(hrInput.value) : undefined,
+      felt: feltSel.value || undefined,
+      notes: notesInput.value.trim() || undefined,
+      gear_used: [],
+    };
+    const rawMarkdown = buildActivityMarkdown(data);
+    const payload = {
+      date: data.date,
+      route: data.route,
+      data,
+      raw_markdown: rawMarkdown,
+    };
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      await fetchSaveActivity(state.apiUrl, state.token, payload);
+      toast('活动已保存', 'success');
+      close();
+      await loadAndRender(true);
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 保存活动';
+    }
+  });
+
+  const close = showModal('➕ 记录活动', form, [saveBtn, el('button', { class: 'btn' }, '关闭')]);
+}
+
+function buildActivityMarkdown(data) {
+  const lines = ['---'];
+  lines.push(`date: "${data.date}"`);
+  lines.push(`route: "${data.route}"`);
+  lines.push(`type: ${data.type}`);
+  lines.push(`distance_km: ${data.distance_km}`);
+  if (data.elevation_gain_m) lines.push(`elevation_gain_m: ${data.elevation_gain_m}`);
+  if (data.elevation_loss_m) lines.push(`elevation_loss_m: ${data.elevation_loss_m}`);
+  if (data.duration_hours != null) lines.push(`duration_hours: ${data.duration_hours}`);
+  if (data.avg_hr) lines.push(`avg_hr: ${data.avg_hr}`);
+  if (data.felt) lines.push(`felt: ${data.felt}`);
+  if (data.gear_used && data.gear_used.length) {
+    lines.push('gear_used:');
+    for (const s of data.gear_used) lines.push(`  - ${s}`);
+  }
+  if (data.notes) lines.push(`notes: "${data.notes}"`);
+  lines.push('---');
+  return lines.join('\n');
+}
+
 /** 写回单条活动的 gear_used：走 /sync import 的 activities upsert（onConflict date+route，无需 id）。
  *  整行覆盖，故必须回传完整 data 和 raw_markdown。 */
 async function fetchSaveActivity(apiUrl, token, payload) {
@@ -458,6 +585,22 @@ async function fetchWithTimeout(url, options, timeoutMs, label) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** 通用删除请求。 */
+async function fetchDelete(apiUrl, token, entity, id) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/${entity}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: {
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  }, 15000, '删除');
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`删除失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
+  }
+  return res.json().catch(() => ({ deleted: true }));
 }
 
 async function fetchToken(apiUrl, secret) {
@@ -1040,7 +1183,12 @@ function renderActivities() {
   const acts = [...state.data.activities].sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const view = viewEl('activities');
   view.innerHTML = '';
-  view.appendChild(el('div', { class: 'section-title' }, `🏃 全部活动（${acts.length}）`));
+  const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+    el('span', {}, `🏃 全部活动（${acts.length}）`),
+    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-activity' }, '➕ 记录活动')
+  );
+  view.appendChild(headerRow);
+  $('.btn-sm[data-action="add-activity"]', headerRow).addEventListener('click', () => openAddActivity());
 
   if (!acts.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无活动记录'));
@@ -1834,11 +1982,26 @@ function renderRoutes() {
       el('td', { class: 'num' }, r.estimated_hours != null ? num(r.estimated_hours) + ' h' : '—'),
       el('td', {},
         el('button', { class: 'btn-sm', 'data-action': 'detail', style: 'margin-right:6px;' }, '详情'),
-        el('button', { class: 'btn-sm btn-primary', 'data-action': 'recommend' }, '推荐')
+        el('button', { class: 'btn-sm btn-primary', 'data-action': 'recommend', style: 'margin-right:6px;' }, '推荐'),
+        el('button', { class: 'btn-sm btn-danger', 'data-action': 'delete' }, '删除')
       )
     );
     $('.btn-sm[data-action="detail"]', tr).addEventListener('click', () => openRouteDetail(r));
     $('.btn-sm[data-action="recommend"]', tr).addEventListener('click', () => openRecommendGear(r));
+    $('.btn-sm[data-action="delete"]', tr).addEventListener('click', async () => {
+      const used = state.data.activities.filter((a) => a.route === r.name || a.route === r.slug).length;
+      const msg = used
+        ? `路线「${r.name || r.slug}」已被 ${used} 条活动记录引用。删除路线不会影响已有活动，但活动详情中的路线名会保留。确认删除？`
+        : `确认删除路线「${r.name || r.slug}」？`;
+      if (!confirm(msg)) return;
+      try {
+        await fetchDelete(state.apiUrl, state.token, 'routes', r.slug);
+        toast('路线已删除', 'success');
+        await loadAndRender(true);
+      } catch (err) {
+        toast(err.message || '删除失败', 'error');
+      }
+    });
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
@@ -2283,20 +2446,47 @@ function renderPlans() {
   for (const p of plans) {
     const card = el('div', { class: 'card' });
     const typeLabel = p.plan_type === 'recovery' ? '🩹 恢复' : '🎯 行程';
-    card.appendChild(el('div', { class: 'section-title' },
-      `${typeLabel} · ${p.route || p.issue || '计划'} · ${fmtDate(p.date)}`));
+    const titleRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+      el('span', {}, `${typeLabel} · ${p.route || p.issue || '计划'} · ${fmtDate(p.date)}`),
+      el('button', { class: 'btn-sm btn-danger', 'data-action': 'delete-plan', 'data-id': String(p.id) }, '删除')
+    );
+    card.appendChild(titleRow);
     const facts = [
       ['距离', p.distance_km != null ? p.distance_km + ' km' : null],
       ['爬升', p.elevation_gain_m != null ? p.elevation_gain_m + ' m' : null],
       ['预计时长', p.estimated_hours != null ? p.estimated_hours + ' h' : null],
       ['恢复天数', p.recovery_days != null ? p.recovery_days + ' 天' : null],
       ['强度', p.intensity_level],
+      ['总重量', p.total_weight_g != null ? (p.total_weight_g / 1000).toFixed(2) + ' kg' : null],
+      ['总体积', p.total_volume_l != null ? Number(p.total_volume_l).toFixed(1) + ' L' : null],
+      ['装备数', Array.isArray(p.gear_recommended) ? p.gear_recommended.length + ' 件' : null],
     ].filter(([, v]) => v != null && v !== '');
     for (const [k, v] of facts) {
       card.appendChild(el('div', {}, el('span', { class: 'badge' }, k), ' ', String(v)));
     }
+    if (p.backpack_recommended) {
+      const bp = state.data.gear.find((g) => g.slug === p.backpack_recommended);
+      card.appendChild(el('div', {}, el('span', { class: 'badge' }, '推荐背包'), ' ', bp ? bp.name : p.backpack_recommended));
+    }
     view.appendChild(card);
   }
+
+  // 删除计划按钮事件委托
+  view.querySelectorAll('.btn-sm[data-action="delete-plan"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const p = plans.find((x) => String(x.id) === id);
+      if (!p) return;
+      if (!confirm(`确认删除计划「${p.route || '未命名'} · ${fmtDate(p.date)}」？`)) return;
+      try {
+        await fetchDelete(state.apiUrl, state.token, 'plans', id);
+        toast('计划已删除', 'success');
+        await loadAndRender(true);
+      } catch (err) {
+        toast(err.message || '删除失败', 'error');
+      }
+    });
+  });
 }
 
 // ---------- tab 切换 ----------

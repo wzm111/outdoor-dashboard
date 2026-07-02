@@ -488,6 +488,13 @@ canvas { width: 100%; display: block; }
   font-weight: 600;
 }
 .btn-primary:hover { background: #5cc488; }
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #2a0a0c;
+  font-weight: 600;
+}
+.btn-danger:hover { background: #f07a82; }
 .btn:disabled,
 .btn-sm:disabled {
   opacity: 0.6;
