@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1419" />
+  <meta name="theme-color" content="#020617" />
   <title>户外助手 · 看板</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏔️</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='%2322c55e' d='M50 15L20 75h60L50 15zm0 12l20 42H30l20-42z'/></svg>" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -14,7 +16,7 @@
   <!-- 登录 / 配置面板 -->
   <div id="auth-screen" class="auth-screen">
     <div class="auth-card">
-      <h1>🏔️ 户外助手看板</h1>
+      <h1><span class="brand-icon" aria-hidden="true"></span>户外助手看板</h1>
       <p class="auth-sub">输入访问密钥连接你的 Supabase 数据</p>
       <label>
         API 地址
@@ -42,19 +44,19 @@
   <!-- 主看板 -->
   <div id="app" class="app" hidden>
     <header class="topbar">
-      <div class="brand">🏔️ 户外助手</div>
+      <div class="brand"><span class="brand-icon" aria-hidden="true"></span>户外助手</div>
       <nav class="tabs" id="tabs">
-        <button class="tab active" data-view="overview">总览</button>
-        <button class="tab" data-view="activities">活动</button>
-        <button class="tab" data-view="body">身体趋势</button>
-        <button class="tab" data-view="gear">装备</button>
-        <button class="tab" data-view="routes">路线</button>
-        <button class="tab" data-view="plans">计划</button>
+        <button type="button" class="tab active" data-view="overview">总览</button>
+        <button type="button" class="tab" data-view="activities">活动</button>
+        <button type="button" class="tab" data-view="body">身体趋势</button>
+        <button type="button" class="tab" data-view="gear">装备</button>
+        <button type="button" class="tab" data-view="routes">路线</button>
+        <button type="button" class="tab" data-view="plans">计划</button>
       </nav>
       <div class="topbar-actions">
         <span id="sync-status" class="sync-status"></span>
-        <button id="refresh-btn" class="icon-btn" title="刷新">↻</button>
-        <button id="logout-btn" class="icon-btn" title="断开 / 清除密钥">⏏</button>
+        <button type="button" id="refresh-btn" class="icon-btn" title="刷新" aria-label="刷新"></button>
+        <button type="button" id="logout-btn" class="icon-btn" title="断开 / 清除密钥" aria-label="断开 / 清除密钥"></button>
       </div>
     </header>
 

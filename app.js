@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v20.2-2026-07-02';
+const APP_VERSION = 'v21-2026-07-02';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -291,7 +291,7 @@ function openAddActivity() {
     el('div', { class: 'form-row' }, el('label', {}, '备注'), notesInput)
   );
 
-  const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '💾 保存活动');
+  const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '保存活动');
   saveBtn.addEventListener('click', async () => {
     const date = dateInput.value;
     const route = routeInput.value.trim();
@@ -331,11 +331,11 @@ function openAddActivity() {
     } catch (err) {
       toast(err.message || '保存失败', 'error');
       saveBtn.disabled = false;
-      saveBtn.textContent = '💾 保存活动';
+      saveBtn.textContent = '保存活动';
     }
   });
 
-  const close = showModal('➕ 记录活动', form, [saveBtn, el('button', { class: 'btn' }, '关闭')]);
+  const close = showModal('记录活动', form, [saveBtn, el('button', { class: 'btn' }, '关闭')]);
 }
 
 function buildActivityMarkdown(data) {
@@ -872,11 +872,11 @@ async function loadAndRender(isRefresh = false) {
       state.data = cached;
       renderAll();
       showDashboard();
-      $('#sync-status').textContent = '⚠ 离线快照';
+      $('#sync-status').textContent = '离线快照';
     } else if (!isRefresh) {
       throw err;
     } else {
-      $('#sync-status').textContent = '⚠ 刷新失败';
+      $('#sync-status').textContent = '刷新失败';
     }
   } finally {
     loading.hidden = true;
@@ -931,7 +931,7 @@ function renderOverview() {
 
   // 档案卡片
   if (Object.keys(profile).length) {
-    view.appendChild(el('div', { class: 'section-title' }, '👤 体能档案'));
+    view.appendChild(el('div', { class: 'section-title' }, '体能档案'));
     const rows = [
       ['体能水平', profile.fitness_level],
       ['周里程目标', profile.weekly_mileage_km != null ? profile.weekly_mileage_km + ' km' : null],
@@ -948,7 +948,7 @@ function renderOverview() {
   }
 
   // 最近活动
-  view.appendChild(el('div', { class: 'section-title' }, '🗓️ 最近活动'));
+  view.appendChild(el('div', { class: 'section-title' }, '最近活动'));
   const recent = [...acts].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
   if (recent.length) {
     view.appendChild(activityTable(recent));
@@ -1181,7 +1181,7 @@ function activityTypeGroup(type) {
 }
 
 function activityGroupLabel(group) {
-  return { running: '🏃 跑步', hiking: '🥾 徒步/爬山', other: '📌 其他' }[group] || '📌 其他';
+  return { running: '跑步', hiking: '徒步/爬山', other: '其他' }[group] || '其他';
 }
 
 function renderActivities() {
@@ -1189,8 +1189,8 @@ function renderActivities() {
   const view = viewEl('activities');
   view.innerHTML = '';
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
-    el('span', {}, `🏃 全部活动（${acts.length}）`),
-    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-activity' }, '➕ 记录活动')
+    el('span', {}, `全部活动（${acts.length}）`),
+    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-activity' }, '记录活动')
   );
   view.appendChild(headerRow);
   $('.btn-sm[data-action="add-activity"]', headerRow).addEventListener('click', () => openAddActivity());
@@ -1222,7 +1222,7 @@ function renderBody() {
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const view = viewEl('body');
   view.innerHTML = '';
-  view.appendChild(el('div', { class: 'section-title' }, `💪 身体趋势（${logs.length} 条记录）`));
+  view.appendChild(el('div', { class: 'section-title' }, `身体趋势（${logs.length} 条记录）`));
 
   if (!logs.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无身体记录'));
@@ -1380,7 +1380,7 @@ function gearUsageOverview(gearList) {
     .sort((a, b) => (Number(b.usage_count) || 0) - (Number(a.usage_count) || 0))
     .slice(0, 8);
   const rankCard = el('div', { class: 'chart-card' });
-  rankCard.appendChild(el('h3', {}, '🏆 使用排行（按次数）'));
+  rankCard.appendChild(el('h3', {}, '使用排行（按次数）'));
   if (!ranked.length) {
     rankCard.appendChild(el('div', { class: 'empty' }, '暂无使用记录'));
   } else {
@@ -1411,20 +1411,20 @@ function gearUsageOverview(gearList) {
       ((b.st.pctOfLife || 0) - (a.st.pctOfLife || 0)));
 
   const warnCard = el('div', { class: 'chart-card wear-warn-section' });
-  warnCard.appendChild(el('h3', {}, '🔧 磨损 / 闲置提醒（经验参考）'));
+  warnCard.appendChild(el('h3', {}, '磨损 / 闲置提醒（经验参考）'));
   if (!warned.length) {
-    warnCard.appendChild(el('div', { class: 'empty' }, '所有在用装备状态良好 ✅'));
+    warnCard.appendChild(el('div', { class: 'empty' }, '所有在用装备状态良好'));
   } else {
     const list = el('div', { class: 'rel-list' });
-    const badgeOf = (lvl) => lvl === 'alert' ? ['🔴', 'wear-badge wear-alert', '已达经验寿命']
-      : lvl === 'warn' ? ['🟡', 'wear-badge wear-warn', '接近经验寿命']
-      : ['💤', 'wear-badge wear-idle', '久未使用'];
+    const badgeOf = (lvl) => lvl === 'alert' ? ['status-dot status-alert', 'wear-badge wear-alert', '已达经验寿命']
+      : lvl === 'warn' ? ['status-dot status-warn', 'wear-badge wear-warn', '接近经验寿命']
+      : ['status-dot status-idle', 'wear-badge wear-idle', '久未使用'];
     for (const { g, st } of warned) {
-      const [icon, cls, label] = badgeOf(st.level);
+      const [dotCls, cls, label] = badgeOf(st.level);
       const item = el('div', { class: 'rel-item' },
         el('div', { class: 'rel-info' },
           el('div', { class: 'rel-name' },
-            el('span', { class: cls }, `${icon} ${label}`),
+            el('span', { class: cls }, [el('span', { class: dotCls }), ' ' + label]),
             ' ' + (g.name || g.slug)),
           el('div', { class: 'rel-brief' }, st.reasons.join(' · '))
         ),
@@ -1452,8 +1452,8 @@ function renderGear() {
 
   // 顶部标题 + AI 添加按钮
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
-    el('span', {}, `🎒 装备库（${allGear.length}）`),
-    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-ai' }, '✨ AI 添加')
+    el('span', {}, `装备库（${allGear.length}）`),
+    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-ai' }, 'AI 添加')
   );
   view.appendChild(headerRow);
   $('.btn-sm[data-action="add-ai"]', headerRow).addEventListener('click', () => openAddGearByAi());
@@ -1490,7 +1490,7 @@ function buildGearToolbar(allGear, view, countLabel) {
   // 搜索框
   const search = el('input', {
     class: 'gear-search', type: 'search', value: gearFilter.q,
-    placeholder: '🔍 搜索名称 / 品牌 / 型号 / 备注',
+    placeholder: '搜索名称 / 品牌 / 型号 / 备注',
   });
   search.addEventListener('input', () => { gearFilter.q = search.value; rerun(); });
   bar.appendChild(search);
@@ -1592,7 +1592,7 @@ function applyGearFilter(allGear, resultsBox, countLabel) {
   if (gearFilter.status === 'active') {
     const retiredCount = allGear.filter((g) => g.condition === 'retired').length;
     if (retiredCount) {
-      const link = el('button', { class: 'gear-retired-link' }, `🗑 另有 ${retiredCount} 件已淘汰装备，点击查看`);
+      const link = el('button', { class: 'gear-retired-link' }, `另有 ${retiredCount} 件已淘汰装备，点击查看`);
       link.addEventListener('click', () => {
         gearFilter.status = 'retired';
         // 同步更新工具条上的状态下拉，再重算
@@ -1644,7 +1644,7 @@ function buildGearCard(g) {
   actions.appendChild(el('button', { class: 'btn-sm', 'data-action': 'detail' }, '详情'));
   actions.appendChild(el('button', { class: 'btn-sm btn-primary', 'data-action': 'update' }, '更新'));
   const isRetired = g.condition === 'retired';
-  const retireBtn = el('button', { class: 'btn-sm' + (isRetired ? ' btn-primary' : ''), 'data-action': isRetired ? 'restore' : 'retire' }, isRetired ? '↩ 恢复' : '🗑 淘汰');
+  const retireBtn = el('button', { class: 'btn-sm' + (isRetired ? ' btn-primary' : ''), 'data-action': isRetired ? 'restore' : 'retire' }, isRetired ? '恢复' : '淘汰');
   actions.appendChild(retireBtn);
 
   card.appendChild(main);
@@ -1664,7 +1664,7 @@ function buildGearCard(g) {
     } catch (err) {
       toast(err.message || '操作失败', 'error');
       retireBtn.disabled = false;
-      retireBtn.textContent = isRetired ? '↩ 恢复' : '🗑 淘汰';
+      retireBtn.textContent = isRetired ? '恢复' : '淘汰';
     }
   });
   return card;
@@ -1686,7 +1686,7 @@ function openGearDetail(g) {
 
   // 装备 → 活动：反查这件装备上过哪些活动，形成双向导航闭环
   const used = activitiesUsingGear(g.slug);
-  wrap.appendChild(el('div', { class: 'section-title rel-heading' }, `🗓 用过的活动（${used.length}）`));
+  wrap.appendChild(el('div', { class: 'section-title rel-heading' }, `用过的活动（${used.length}）`));
   if (!used.length) {
     wrap.appendChild(el('div', { class: 'empty' }, '暂无关联活动记录'));
   } else {
@@ -1739,7 +1739,7 @@ async function openGearUpdate(g) {
     el('label', {}, '商品 URL（REI / 品牌官网等）'),
     el('input', { id: 'update-url', type: 'url', value: sourceUrl, placeholder: 'https://www.rei.com/product/...' })
   );
-  const scrapeBtn = el('button', { class: 'btn btn-primary' }, '🔍 从网页抓取');
+  const scrapeBtn = el('button', { class: 'btn btn-primary' }, '从网页抓取');
 
   scrapeBtn.addEventListener('click', async () => {
     const url = $('#update-url').value.trim();
@@ -1755,7 +1755,7 @@ async function openGearUpdate(g) {
       resultArea.appendChild(el('div', { class: 'error-text' }, err.message || '抓取失败'));
     } finally {
       scrapeBtn.disabled = false;
-      scrapeBtn.textContent = '🔍 从网页抓取';
+      scrapeBtn.textContent = '从网页抓取';
     }
   });
 
@@ -1765,11 +1765,11 @@ async function openGearUpdate(g) {
   // ---------- 面板 2：AI 识别 ----------
   panels.ai = el('div', {});
   const aiDefault = buildAiPrompt(g);
-  const aiLabel = el('label', {}, '🤖 已根据当前装备生成描述，可直接识别，也可补充/修改后识别');
+  const aiLabel = el('label', {}, '已根据当前装备生成描述，可直接识别，也可补充/修改后识别');
   const aiArea = el('textarea', { id: 'update-ai', rows: 6, placeholder: '例如：始祖鸟 Beta LT 硬壳冲锋衣，黑色 M 码，GORE-TEX 面料，重约 350g，价格 4500 元' }, aiDefault);
   const aiActions = el('div', { class: 'gear-card-actions' });
-  const aiBtn = el('button', { class: 'btn btn-primary' }, '✨ AI 识别');
-  const aiAutoBtn = el('button', { class: 'btn' }, '🔄 重新生成描述');
+  const aiBtn = el('button', { class: 'btn btn-primary' }, 'AI 识别');
+  const aiAutoBtn = el('button', { class: 'btn' }, '重新生成描述');
   aiActions.appendChild(aiBtn);
   aiActions.appendChild(aiAutoBtn);
 
@@ -1791,7 +1791,7 @@ async function openGearUpdate(g) {
       resultArea.appendChild(el('div', { class: 'error-text' }, err.message || 'AI 识别失败'));
     } finally {
       aiBtn.disabled = false;
-      aiBtn.textContent = '✨ AI 识别';
+      aiBtn.textContent = 'AI 识别';
     }
   }
 
@@ -1806,9 +1806,9 @@ async function openGearUpdate(g) {
 
   // ---------- 面板 3：粘贴规格 ----------
   panels.paste = el('div', {});
-  const pasteLabel = el('label', {}, '📋 粘贴商品规格文本（京东/天猫详情页复制即可）');
+  const pasteLabel = el('label', {}, '粘贴商品规格文本（京东/天猫详情页复制即可）');
   const pasteArea = el('textarea', { id: 'update-spec', rows: 6, placeholder: '重量：380g\n面料：GORE-TEX 3L\n…' });
-  const parseBtn = el('button', { class: 'btn' }, '📋 解析粘贴文本');
+  const parseBtn = el('button', { class: 'btn' }, '解析粘贴文本');
 
   parseBtn.addEventListener('click', () => {
     const text = $('#update-spec').value.trim();
@@ -1822,7 +1822,7 @@ async function openGearUpdate(g) {
   panels.paste.appendChild(parseBtn);
 
   // 组装选项卡：AI 识别放第一位
-  for (const [name, label] of [['ai', '✨ AI 识别'], ['scrape', '🔍 网页抓取'], ['paste', '📋 粘贴规格']]) {
+  for (const [name, label] of [['ai', 'AI 识别'], ['scrape', '网页抓取'], ['paste', '粘贴规格']]) {
     const btn = el('button', { class: 'modal-tab' + (name === 'ai' ? ' active' : ''), type: 'button' }, label);
     btn.addEventListener('click', () => switchTab(name));
     buttons[name] = btn;
@@ -1871,10 +1871,10 @@ function slugifyGear(name, brand, model) {
 function openAddGearByAi() {
   const content = el('div', {});
   const resultArea = el('div', { class: 'scrape-result' });
-  const label = el('label', {}, '🤖 输入装备描述，AI 会自动识别名称、品牌、重量、材质等字段');
+  const label = el('label', {}, '输入装备描述，AI 会自动识别名称、品牌、重量、材质等字段');
   const textarea = el('textarea', { id: 'add-gear-ai', rows: 6, placeholder: '例如：始祖鸟 Beta LT 硬壳冲锋衣，黑色 M 码，GORE-TEX 面料，重约 350g，价格 4500 元' });
   const actions = el('div', { class: 'gear-card-actions' });
-  const aiBtn = el('button', { class: 'btn btn-primary' }, '✨ AI 识别并生成');
+  const aiBtn = el('button', { class: 'btn btn-primary' }, 'AI 识别并生成');
   actions.appendChild(aiBtn);
 
   async function run() {
@@ -1896,7 +1896,7 @@ function openAddGearByAi() {
       resultArea.appendChild(el('div', { class: 'error-text' }, err.message || 'AI 识别失败'));
     } finally {
       aiBtn.disabled = false;
-      aiBtn.textContent = '✨ AI 识别并生成';
+      aiBtn.textContent = 'AI 识别并生成';
     }
   }
 
@@ -1904,7 +1904,7 @@ function openAddGearByAi() {
   content.appendChild(el('div', { class: 'form-row' }, label, textarea));
   content.appendChild(actions);
   content.appendChild(resultArea);
-  showModal('✨ AI 添加装备', content, []);
+  showModal('AI 添加装备', content, []);
 }
 
 function renderScrapeResult(container, merged, original, provider) {
@@ -1923,7 +1923,7 @@ function renderScrapeResult(container, merged, original, provider) {
     return;
   }
 
-  const saveBtn = el('button', { class: 'btn btn-primary' }, `💾 保存（更新 ${changed.length} 个字段）`);
+  const saveBtn = el('button', { class: 'btn btn-primary' }, `保存（更新 ${changed.length} 个字段）`);
   saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = true;
     saveBtn.textContent = '保存中…';
@@ -1936,7 +1936,7 @@ function renderScrapeResult(container, merged, original, provider) {
     } catch (err) {
       toast(err.message || '保存失败', 'error');
       saveBtn.disabled = false;
-      saveBtn.textContent = `💾 保存（更新 ${changed.length} 个字段）`;
+      saveBtn.textContent = `保存（更新 ${changed.length} 个字段）`;
     }
   });
   container.appendChild(saveBtn);
@@ -1951,10 +1951,10 @@ function renderRoutes() {
   view.innerHTML = '';
   // 顶部标题 + AI 添加 + 推荐装备按钮（空列表时按钮也保留）
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
-    el('span', {}, `🗺️ 路线库（${routes.length}）`),
+    el('span', {}, `路线库（${routes.length}）`),
     el('div', { style: 'display:flex;gap:8px;' },
-      el('button', { class: 'btn-sm btn-primary', 'data-action': 'recommend-gear' }, '🎒 推荐装备'),
-      el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-route-ai' }, '✨ AI 添加')
+      el('button', { class: 'btn-sm btn-primary', 'data-action': 'recommend-gear' }, '推荐装备'),
+      el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-route-ai' }, 'AI 添加')
     )
   );
   view.appendChild(headerRow);
@@ -2114,13 +2114,13 @@ function renderRouteAiResult(container, parsed, provider) {
   container.appendChild(dupHint);
   const refreshDup = () => {
     if (existing.has(slugInput.value.trim())) {
-      dupHint.style.display = ''; dupHint.textContent = '⚠️ 已存在同 ID 路线，保存将覆盖它';
+      dupHint.style.display = ''; dupHint.textContent = '已存在同 ID 路线，保存将覆盖它';
     } else { dupHint.style.display = 'none'; }
   };
   slugInput.addEventListener('input', refreshDup);
   refreshDup();
 
-  const saveBtn = el('button', { class: 'btn btn-primary' }, '💾 保存路线');
+  const saveBtn = el('button', { class: 'btn btn-primary' }, '保存路线');
   saveBtn.addEventListener('click', async () => {
     const slug = slugInput.value.trim();
     if (!slug) { toast('请填写路线 ID', 'warn'); return; }
@@ -2135,7 +2135,7 @@ function renderRouteAiResult(container, parsed, provider) {
     } catch (err) {
       toast(err.message || '保存失败', 'error');
       saveBtn.disabled = false;
-      saveBtn.textContent = '💾 保存路线';
+      saveBtn.textContent = '保存路线';
     }
   });
   container.appendChild(saveBtn);
@@ -2146,10 +2146,10 @@ function openAddRouteByAi() {
   if (!state.token) { toast('请先连接后再添加路线', 'warn'); return; }
   const content = el('div', {});
   const resultArea = el('div', { class: 'scrape-result' });
-  const label = el('label', {}, '🤖 用一句话描述路线，AI 会识别名称、距离、爬升、难度等字段');
+  const label = el('label', {}, '用一句话描述路线，AI 会识别名称、距离、爬升、难度等字段');
   const textarea = el('textarea', { id: 'add-route-ai', rows: 5, placeholder: '例如：武功山反穿，江西萍乡，24km 爬升1800m，山脊草甸地形，预计10小时' });
   const actions = el('div', { class: 'gear-card-actions' });
-  const aiBtn = el('button', { class: 'btn btn-primary' }, '✨ AI 识别并生成');
+  const aiBtn = el('button', { class: 'btn btn-primary' }, 'AI 识别并生成');
   actions.appendChild(aiBtn);
 
   async function run() {
@@ -2168,7 +2168,7 @@ function openAddRouteByAi() {
       resultArea.appendChild(el('div', { class: 'error-text' }, err.message || 'AI 识别失败'));
     } finally {
       aiBtn.disabled = false;
-      aiBtn.textContent = '✨ AI 识别并生成';
+      aiBtn.textContent = 'AI 识别并生成';
     }
   }
 
@@ -2176,7 +2176,7 @@ function openAddRouteByAi() {
   content.appendChild(el('div', { class: 'form-row' }, label, textarea));
   content.appendChild(actions);
   content.appendChild(resultArea);
-  showModal('✨ AI 添加路线', content, []);
+  showModal('AI 添加路线', content, []);
 }
 
 // ---------- 装备推荐 ----------
@@ -2243,7 +2243,7 @@ function openRecommendGear(preselectedRoute) {
 
   // --- 结果区 ---
   const resultArea = el('div', { class: 'scrape-result', style: 'margin-top:14px;' });
-  const genBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '🎒 生成装备推荐');
+  const genBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '生成装备推荐');
 
   content.appendChild(form);
   content.appendChild(genBtn);
@@ -2379,19 +2379,19 @@ function openRecommendGear(preselectedRoute) {
       }
       renderResult();
       saveBtn.disabled = false;
-      saveBtn.textContent = '💾 保存计划';
+      saveBtn.textContent = '保存计划';
     } catch (err) {
       resultArea.appendChild(el('div', { class: 'error-text' }, err.message || '推荐失败'));
     } finally {
       genBtn.disabled = false;
-      genBtn.textContent = '🎒 生成装备推荐';
+      genBtn.textContent = '生成装备推荐';
     }
   }
 
   genBtn.addEventListener('click', runRecommend);
 
   // --- 保存按钮 ---
-  const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '💾 保存计划');
+  const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '保存计划');
   saveBtn.disabled = true;
   saveBtn.addEventListener('click', async () => {
     if (!lastResult) { toast('请先生成推荐', 'warn'); return; }
@@ -2429,12 +2429,12 @@ function openRecommendGear(preselectedRoute) {
     } catch (err) {
       toast(err.message || '保存失败', 'error');
       saveBtn.disabled = false;
-      saveBtn.textContent = '💾 保存计划';
+      saveBtn.textContent = '保存计划';
     }
   });
 
   const closeBtn = el('button', { class: 'btn' }, '关闭');
-  const close = showModal('🎒 推荐装备与计划', content, [saveBtn, closeBtn]);
+  const close = showModal('推荐装备与计划', content, [saveBtn, closeBtn]);
 }
 
 // ---------- 计划 ----------
@@ -2443,7 +2443,7 @@ function renderPlans() {
   const plans = [...state.data.plans].sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const view = viewEl('plans');
   view.innerHTML = '';
-  view.appendChild(el('div', { class: 'section-title' }, `📋 计划（${plans.length}）`));
+  view.appendChild(el('div', { class: 'section-title' }, `计划（${plans.length}）`));
 
   if (!plans.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无计划'));
