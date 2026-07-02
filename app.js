@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v20.1-2026-07-02';
+const APP_VERSION = 'v20.2-2026-07-02';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -972,8 +972,12 @@ function activityTable(acts) {
   const wrap = el('div', { class: 'table-wrap' });
   const table = el('table');
   const headerCells = [
-    el('th', {}, '日期'), el('th', {}, '路线'), el('th', {}, '类型'),
-    el('th', {}, '距离'), el('th', {}, '爬升'),
+    el('th', {}, '日期'),
+    // 跑步活动地点/备注比路线名更实用；徒步/爬山仍显示路线
+    el('th', {}, hasRun ? '地点/备注' : '路线'),
+    el('th', {}, '类型'),
+    el('th', {}, '距离'),
+    el('th', {}, '爬升'),
   ];
   // 跑步显示精确时长 + 配速；徒步/爬山显示普通时长
   const hasRun = acts.some(isRunning);
@@ -990,7 +994,7 @@ function activityTable(acts) {
     const gearCount = gearSlugsOf(a).length;
     const cells = [
       el('td', {}, fmtDate(a.date)),
-      el('td', {}, a.route || '—'),
+      el('td', {}, hasRun ? (a.notes || a.route || '—') : (a.route || '—')),
       el('td', {}, a.type || '—'),
       el('td', { class: 'num' }, num(a.distance_km) + ' km'),
       el('td', { class: 'num' }, num(a.elevation_gain_m, 0) + ' m'),
