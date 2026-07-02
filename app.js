@@ -996,7 +996,7 @@ function activityTable(acts) {
       el('td', {}, fmtDate(a.date)),
       el('td', {}, hasRun ? (a.notes || a.route || '—') : (a.route || '—')),
       el('td', {}, a.type || '—'),
-      el('td', { class: 'num' }, num(a.distance_km) + ' km'),
+      el('td', { class: 'num' }, running ? num(a.distance_km, 2) + ' km' : num(a.distance_km) + ' km'),
       el('td', { class: 'num' }, num(a.elevation_gain_m, 0) + ' m'),
       el('td', { class: 'num' }, duration),
     ];
