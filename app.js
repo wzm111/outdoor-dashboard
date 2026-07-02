@@ -1006,7 +1006,7 @@ function activityTable(acts) {
       el('td', { class: 'num' }, a.avg_hr ? num(a.avg_hr, 0) : '—'),
       el('td', {}, feltStars(a.felt)),
       // 装备列：显示件数，可点整行查看
-      el('td', { class: 'num' }, gearCount ? el('span', { class: 'gear-count-badge' }, `🎒 ${gearCount}`) : '—')
+      el('td', { class: 'num' }, gearCount ? el('span', { class: 'gear-count-badge' }, `装备 ${gearCount}`) : '—')
     );
     const tr = el('tr', { class: 'activity-row', title: '点击查看本次装备' }, ...cells);
     tr.addEventListener('click', () => openActivityGear(a, gearMap));
@@ -1672,12 +1672,12 @@ function buildGearCard(g) {
 
 function categoryLabel(cat) {
   const map = {
-    shoes: '👟 鞋类', backpack: '🎒 背包', jacket: '🧥 夹克/外套',
-    pants: '👖 裤子', poles: '🦯 登山杖', light: '🔦 照明',
-    sleeping: '🛏️ 睡眠系统', cooking: '🍳 炊具', electronics: '🔋 电子/导航',
-    firstaid: '🩹 急救/安全', hydration: '💧 水具', accessory: '🔧 配件/其他',
+    shoes: '鞋类', backpack: '背包', jacket: '夹克/外套',
+    pants: '裤子', poles: '登山杖', light: '照明',
+    sleeping: '睡眠系统', cooking: '炊具', electronics: '电子/导航',
+    firstaid: '急救/安全', hydration: '水具', accessory: '配件/其他',
   };
-  return map[String(cat).toLowerCase()] || `📦 ${cat}`;
+  return map[String(cat).toLowerCase()] || cat;
 }
 
 function openGearDetail(g) {
@@ -2260,10 +2260,10 @@ function openRecommendGear(preselectedRoute) {
 
     // 摘要卡片
     const summary = el('div', { class: 'recommend-summary card', style: 'margin-bottom:12px;padding:12px;' });
-    summary.appendChild(el('div', { class: 'section-title' }, `🌤 ${weather.summary} · ${weather.temp_low_c}°C ~ ${weather.temp_high_c}°C`));
+    summary.appendChild(el('div', { class: 'section-title' }, `${weather.summary} · ${weather.temp_low_c}°C ~ ${weather.temp_high_c}°C`));
     summary.appendChild(el('div', { class: 'rel-brief' }, `降水 ${weather.precipitation_chance}% · 风速 ${weather.wind_speed_kmh}km/h · UV ${weather.uv_index}`));
     if (backpack) {
-      summary.appendChild(el('div', { class: 'rel-brief' }, `🎒 ${backpack.name}（${backpack.capacity_l} L）：${backpack.reason}`));
+      summary.appendChild(el('div', { class: 'rel-brief' }, `${backpack.name}（${backpack.capacity_l} L）：${backpack.reason}`));
     }
     summary.appendChild(el('div', { class: 'rel-brief' }, `总重量 ${(total_weight_g / 1000).toFixed(2)} kg · 总体积 ${Number(total_volume_l).toFixed(1)} L`));
     resultArea.appendChild(summary);
