@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v20-2026-07-01';
+const APP_VERSION = 'v20.1-2026-07-02';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -2014,6 +2014,7 @@ function openRouteDetail(r) {
     ['slug', r.slug],
     ['名称', r.name],
     ['地点', r.location],
+    ['天气城市', r.weather_city],
     ['距离', r.distance_km != null ? num(r.distance_km) + ' km' : null],
     ['爬升', r.elevation_gain_m != null ? num(r.elevation_gain_m, 0) + ' m' : null],
     ['下降', r.elevation_loss_m != null ? num(r.elevation_loss_m, 0) + ' m' : null],
@@ -2066,6 +2067,7 @@ function routeFactList(r) {
   const facts = [
     ['名称', r.name],
     ['地点', r.location],
+    ['天气城市', r.weather_city],
     ['距离', r.distance_km != null ? num(r.distance_km) + ' km' : null],
     ['爬升', r.elevation_gain_m != null ? num(r.elevation_gain_m, 0) + ' m' : null],
     ['下降', r.elevation_loss_m != null ? num(r.elevation_loss_m, 0) + ' m' : null],
