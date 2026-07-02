@@ -977,7 +977,7 @@ function activityTable(acts) {
   const headerCells = [
     el('th', {}, '日期'),
     // 跑步活动地点/备注比路线名更实用；徒步/爬山仍显示路线
-    el('th', {}, hasRun ? '地点/备注' : '路线'),
+    el('th', { class: 'col-location' }, hasRun ? '地点/备注' : '路线'),
     el('th', {}, '类型'),
     el('th', {}, '距离'),
     el('th', {}, '爬升'),
@@ -995,7 +995,7 @@ function activityTable(acts) {
     const gearCount = gearSlugsOf(a).length;
     const cells = [
       el('td', {}, fmtDate(a.date)),
-      el('td', {}, hasRun ? (a.notes || a.route || '—') : (a.route || '—')),
+      el('td', { class: 'col-location' }, hasRun ? (a.notes || a.route || '—') : (a.route || '—')),
       el('td', {}, a.type || '—'),
       el('td', { class: 'num' }, running ? num(a.distance_km, 2) + ' km' : num(a.distance_km) + ' km'),
       el('td', { class: 'num' }, num(a.elevation_gain_m, 0) + ' m'),

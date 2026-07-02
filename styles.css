@@ -184,12 +184,28 @@ body {
 
 /* 表格 */
 .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table-wrap::-webkit-scrollbar { height: 8px; }
+.table-wrap::-webkit-scrollbar-track { background: var(--bg-elev); }
+.table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: 14px; }
 th, td { padding: 10px 14px; text-align: left; white-space: nowrap; }
 th { background: var(--bg-elev); color: var(--text-dim); font-weight: 600; font-size: 12px; }
 tr { border-top: 1px solid var(--border); }
 tbody tr:hover { background: var(--bg-elev); }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.col-location { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+/* 分组小标题 */
+.subsection-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 28px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.subsection-title:first-child { margin-top: 0; }
 
 /* 徽标 / 标签 */
 .badge {
