@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v23-2026-07-02';
+const APP_VERSION = 'v24-2026-07-02';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -484,57 +484,212 @@ async function fetchSaveActivity(apiUrl, token, payload) {
 }
 
 
-// ---------- 装备使用统计 / 磨损·闲置提醒 ----------
+// ---------- 装备使用统计 / 磨损·闲置提醒 / AI 生命周期洞察 ----------
 
-// 按类别的经验寿命阈值（里程 km）。仅作参考、非精确值；找不到的类别不按里程判磨损。
-const GEAR_KM_LIFESPAN = {
-  shoes: 600,      // 跑鞋/徒步鞋经验寿命
-  backpack: 1500,
-  poles: 8000,
-  pants: 1200,
-  jacket: 1500,
+// 按类别的经验寿命阈值：距离(km) + 年限。与 scripts/gear-lifecycle.py CATEGORY_THRESHOLDS 对齐。
+const GEAR_LIFECYCLE_THRESHOLDS = {
+  shoes:        { distance_km: 600,  years: 2, name: '鞋类' },
+  backpack:     { distance_km: 5000, years: 8, name: '背包' },
+  jacket:       { distance_km: 3000, years: 5, name: '外套/冲锋衣' },
+  pants:        { distance_km: 2000, years: 4, name: '裤子' },
+  poles:        { distance_km: 2000, years: 3, name: '登山杖' },
+  light:        { distance_km: 1000, years: 5, name: '照明' },
+  sleeping:     { distance_km: 5000, years: 8, name: '睡眠系统' },
+  sleeping_bag: { distance_km: 5000, years: 8, name: '睡袋' },
+  tent:         { distance_km: 3000, years: 10, name: '帐篷' },
+  socks:        { distance_km: 400,  years: 1, name: '袜子' },
+  gloves:       { distance_km: 1500, years: 3, name: '手套' },
+  hat:          { distance_km: 2000, years: 4, name: '帽子' },
+  buff:         { distance_km: 1000, years: 3, name: '头巾/面罩' },
+  hydration:    { distance_km: 2000, years: 5, name: '水具' },
+  water_bottle: { distance_km: 2000, years: 5, name: '水具' },
+  electronics:  { distance_km: 3000, years: 5, name: '电子产品' },
+  firstaid:     { distance_km: 5000, years: 3, name: '急救包' },
+  first_aid:    { distance_km: 5000, years: 3, name: '急救包' },
+  cooking:      { distance_km: 3000, years: 5, name: '炊具' },
+  accessory:    { distance_km: 3000, years: 5, name: '配件/其他' },
+  other:        { distance_km: 3000, years: 5, name: '其他' },
 };
 const IDLE_WARN_DAYS = 180; // 用过但超过半年没再用 → 闲置提醒
+const IDLE_REPLACE_DAYS = 365; // 超过一年未使用 → 建议淘汰
 
-/** 两个日期（YYYY-MM-DD 或可被 Date.parse 解析）相差的天数，解析失败返回 null。 */
-function daysBetween(fromDate, toDate) {
-  const a = Date.parse(String(fromDate).slice(0, 10));
-  const b = Date.parse(String(toDate).slice(0, 10));
-  if (isNaN(a) || isNaN(b)) return null;
-  return Math.round((b - a) / 86400000);
-}
+/** 从 activities 实时计算一件装备的完整生命周期数据。
+ *  返回：
+ *    usage_count, total_distance_km, total_duration_hours,
+ *    first_used_date, last_used_date, idle_days,
+ *    threshold { distance_km, years } | null,
+ *    distance_ratio, years_ratio, max_ratio, condition
+ */
+function computeGearLifecycle(g, activities, today) {
+  const empty = {
+    usage_count: 0, total_distance_km: 0, total_duration_hours: 0,
+    first_used_date: null, last_used_date: null, idle_days: null,
+    threshold: null, distance_ratio: 0, years_ratio: 0, max_ratio: 0,
+    condition: 'excellent',
+  };
+  if (!g) return empty;
 
-/** 计算一件装备的磨损/闲置状态（启发式，非精确）。
- *  返回 { level:'ok'|'warn'|'alert'|'idle', reasons:[中文], pctOfLife:0-1|null, idleDays:number|null }
- *  - retired 装备直接判 ok（已退役不预警）。
- *  - 磨损：total_distance_km / 类别阈值 ≥0.8→warn，≥1.0→alert。
- *  - 闲置：用过（usage_count>0）且 last_used_date 距今 > IDLE_WARN_DAYS。从没用过的不算闲置。 */
-function gearWearStatus(g, today) {
-  const reasons = [];
-  if (!g || g.condition === 'retired') return { level: 'ok', reasons, pctOfLife: null, idleDays: null };
+  const slug = g.slug;
+  let usage_count = 0, total_distance_km = 0, total_duration_hours = 0;
+  let first_used_date = null, last_used_date = null;
 
-  // 磨损（仅对有经验阈值的类别 + 有里程数据）
-  let level = 'ok';
-  let pctOfLife = null;
-  const limit = GEAR_KM_LIFESPAN[g.category];
-  const km = Number(g.total_distance_km);
-  if (limit && !isNaN(km) && km > 0) {
-    pctOfLife = km / limit;
-    const pctTxt = Math.round(pctOfLife * 100);
-    if (pctOfLife >= 1.0) {
-      level = 'alert';
-      reasons.push(`里程 ${num(km, 1)} / ${limit} km（${pctTxt}%，已达经验寿命）`);
-    } else if (pctOfLife >= 0.8) {
-      level = 'warn';
-      reasons.push(`里程 ${num(km, 1)} / ${limit} km（${pctTxt}%，接近经验寿命）`);
+  for (const a of (activities || [])) {
+    const slugs = gearSlugsOf(a);
+    if (!slugs.includes(slug)) continue;
+    usage_count += 1;
+    const d = Number(a.distance_km);
+    if (!isNaN(d) && d > 0) total_distance_km += d;
+    const h = Number(a.duration_hours);
+    if (!isNaN(h) && h > 0) total_duration_hours += h;
+    const date = a.date;
+    if (date) {
+      if (!last_used_date || String(date) > String(last_used_date)) last_used_date = date;
+      if (!first_used_date || String(date) < String(first_used_date)) first_used_date = date;
     }
   }
 
-  // 闲置（只对用过的装备判；磨损预警优先级更高，磨损已 warn/alert 时不再叠加闲置为主状态）
+  const threshold = GEAR_LIFECYCLE_THRESHOLDS[g.category] || GEAR_LIFECYCLE_THRESHOLDS.other;
+  let idle_days = null;
+  if (last_used_date && today) {
+    const d = daysBetween(last_used_date, today);
+    if (d != null) idle_days = d;
+  }
+
+  let distance_ratio = 0, years_ratio = 0, max_ratio = 0;
+  if (threshold) {
+    if (threshold.distance_km > 0 && total_distance_km > 0) {
+      distance_ratio = total_distance_km / threshold.distance_km;
+    }
+    if (threshold.years > 0 && first_used_date) {
+      const daysOwned = daysBetween(first_used_date, today);
+      if (daysOwned != null) years_ratio = daysOwned / (threshold.years * 365);
+    }
+    max_ratio = Math.max(distance_ratio, years_ratio);
+  }
+
+  const condition = computeLifecycleCondition(max_ratio, idle_days);
+
+  return {
+    usage_count, total_distance_km, total_duration_hours,
+    first_used_date, last_used_date, idle_days,
+    threshold, distance_ratio, years_ratio, max_ratio, condition,
+  };
+}
+
+/** 根据最大磨损比 + 闲置天数评估 condition。
+ *  注意：闲置不会把 condition 降到 replace 以下，仅作为 alerts 来源。 */
+function computeLifecycleCondition(maxRatio, idleDays) {
+  if (maxRatio >= 1.0) return 'replace';
+  if (maxRatio >= 0.8) return 'poor';
+  if (maxRatio >= 0.5) return 'fair';
+  if (maxRatio >= 0.2) return 'good';
+  return 'excellent';
+}
+
+/** 生成装备生命周期提醒列表（AI 洞察）。
+ *  返回 [{ level: 'critical'|'warning'|'info', message: string }] */
+function gearLifecycleAlerts(g, lifecycle) {
+  const alerts = [];
+  if (!g || g.condition === 'retired') return alerts;
+
+  const t = lifecycle.threshold;
+
+  // 磨损：里程 or 年限
+  if (lifecycle.max_ratio >= 1.0) {
+    const pct = Math.round(lifecycle.max_ratio * 100);
+    alerts.push({ level: 'critical', message: `已达经验寿命 ${pct}%（${t ? t.name : '装备'}），建议更换` });
+  } else if (lifecycle.max_ratio >= 0.8) {
+    const pct = Math.round(lifecycle.max_ratio * 100);
+    alerts.push({ level: 'warning', message: `接近经验寿命 ${pct}%（${t ? t.name : '装备'}），准备更换` });
+  } else if (lifecycle.distance_ratio >= 0.5 || lifecycle.years_ratio >= 0.5) {
+    const pct = Math.round(lifecycle.max_ratio * 100);
+    alerts.push({ level: 'info', message: `已使用 ${pct}% 经验寿命，留意磨损` });
+  }
+
+  // 闲置
+  if (lifecycle.idle_days != null) {
+    if (lifecycle.idle_days > IDLE_REPLACE_DAYS) {
+      alerts.push({ level: 'warning', message: `已闲置 ${lifecycle.idle_days} 天，建议淘汰或出二手` });
+    } else if (lifecycle.idle_days > IDLE_WARN_DAYS) {
+      alerts.push({ level: 'info', message: `已闲置 ${lifecycle.idle_days} 天` });
+    }
+  }
+
+  // 从来没用过但有购买记录
+  if (lifecycle.usage_count === 0 && (g.price || g.source_url)) {
+    alerts.push({ level: 'info', message: '尚未记录使用，建议尽快实战测试' });
+  }
+
+  return alerts;
+}
+
+/** 一句 AI 风格建议。 */
+function gearAiAdvice(g, lifecycle) {
+  if (!g) return '';
+  if (g.condition === 'retired') return '已淘汰，不再参与推荐。';
+
+  const alerts = gearLifecycleAlerts(g, lifecycle);
+  if (alerts.length) {
+    const top = alerts[0];
+    if (top.level === 'critical') return '⚠️ ' + top.message;
+    if (top.level === 'warning') return '🔶 ' + top.message;
+    return '💡 ' + top.message;
+  }
+
+  if (lifecycle.usage_count > 0 && lifecycle.last_used_date) {
+    return `✅ 状态良好，最近 ${lifecycle.idle_days != null ? lifecycle.idle_days + ' 天前' : ''} 使用过`;
+  }
+  if (g.price) return '💡 已记录价格，点击卡片追踪历史价格';
+  return '';
+}
+
+/** 计算一件装备的磨损/闲置状态（启发式，非精确）。
+ *  优先基于 activities 实时计算；activities 未传入时回退到 gear 字段。
+ *  返回 { level:'ok'|'warn'|'alert'|'idle', reasons:[中文], pctOfLife:0-1|null, idleDays:number|null } */
+function gearWearStatus(g, today, activities) {
+  const reasons = [];
+  if (!g || g.condition === 'retired') return { level: 'ok', reasons, pctOfLife: null, idleDays: null };
+
+  const lifecycle = activities ? computeGearLifecycle(g, activities, today) : null;
+  const threshold = (lifecycle && lifecycle.threshold) || GEAR_LIFECYCLE_THRESHOLDS[g.category] || null;
+
+  // 磨损
+  let level = 'ok';
+  let pctOfLife = null;
+  const km = lifecycle ? lifecycle.total_distance_km : Number(g.total_distance_km);
+  const distLimit = threshold ? threshold.distance_km : null;
+  if (distLimit && !isNaN(km) && km > 0) {
+    pctOfLife = km / distLimit;
+    const pctTxt = Math.round(pctOfLife * 100);
+    if (pctOfLife >= 1.0) {
+      level = 'alert';
+      reasons.push(`里程 ${num(km, 1)} / ${distLimit} km（${pctTxt}%，已达经验寿命）`);
+    } else if (pctOfLife >= 0.8) {
+      level = 'warn';
+      reasons.push(`里程 ${num(km, 1)} / ${distLimit} km（${pctTxt}%，接近经验寿命）`);
+    }
+  }
+
+  // 年限磨损（无里程或年限比更高时）
+  if (lifecycle && lifecycle.years_ratio > (pctOfLife || 0)) {
+    const yrPct = Math.round(lifecycle.years_ratio * 100);
+    if (lifecycle.years_ratio >= 1.0) {
+      level = 'alert';
+      reasons.push(`已使用 ${yrPct}% 经验年限，建议更换`);
+      pctOfLife = lifecycle.years_ratio;
+    } else if (lifecycle.years_ratio >= 0.8) {
+      level = 'warn';
+      reasons.push(`已使用 ${yrPct}% 经验年限，接近更换期`);
+      if (pctOfLife == null) pctOfLife = lifecycle.years_ratio;
+    }
+  }
+
+  // 闲置
   let idleDays = null;
-  const usage = Number(g.usage_count) || 0;
-  if (usage > 0 && g.last_used_date && today) {
-    const d = daysBetween(g.last_used_date, today);
+  const usage = lifecycle ? lifecycle.usage_count : (Number(g.usage_count) || 0);
+  const lastUsed = lifecycle ? lifecycle.last_used_date : g.last_used_date;
+  if (usage > 0 && lastUsed && today) {
+    const d = daysBetween(lastUsed, today);
     if (d != null && d > IDLE_WARN_DAYS) {
       idleDays = d;
       reasons.push(`已 ${d} 天未使用`);
@@ -543,6 +698,12 @@ function gearWearStatus(g, today) {
   }
 
   return { level, reasons, pctOfLife, idleDays };
+}
+
+/** 旧的 GEAR_KM_LIFESPAN 兼容别名，避免其他代码引用报错（已合并到 GEAR_LIFECYCLE_THRESHOLDS）。 */
+const GEAR_KM_LIFESPAN = {};
+for (const [k, v] of Object.entries(GEAR_LIFECYCLE_THRESHOLDS)) {
+  if (v.distance_km) GEAR_KM_LIFESPAN[k] = v.distance_km;
 }
 
 /** 把装备数据渲染成只读键值列表。 */
@@ -750,6 +911,55 @@ async function fetchSaveGear(apiUrl, token, slug, data) {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`保存装备失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+async function fetchGearPriceHistory(apiUrl, token, slug) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}/price/history`, {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  }, 15000, '获取价格历史');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`获取价格历史失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+async function fetchGearPriceRecord(apiUrl, token, slug, payload) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}/price/record`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  }, 15000, '记录价格');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`记录价格失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+async function fetchGearPriceFetch(apiUrl, token, slug, platform) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}/price/fetch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(platform ? { platform } : {}),
+  }, 30000, '自动抓取价格');
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`抓取价格失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
   }
   return res.json();
 }
@@ -1741,28 +1951,41 @@ function drawLine(canvas, points, color, forceMin, forceMax) {
 
 // ---------- 装备 ----------
 
-/** 装备使用概览：统计卡片 + 使用排行（DOM 比例条）+ 磨损/闲置预警。
- *  只吃在用装备（condition!=='retired'），纯读已加载字段，不发 API、不写回。 */
+/** 装备使用概览：统计卡片 + Gear Health + 使用排行（DOM 比例条）+ 磨损/闲置预警。
+ *  基于 activities 实时计算生命周期，AI-first；人工仅作查看与确认。 */
 function gearUsageOverview(gearList) {
   const box = el('div', { class: 'gear-usage-overview' });
   const active = (gearList || []).filter((g) => g.condition !== 'retired');
   if (!active.length) return box; // 无在用装备则不显示概览
 
   const today = fmtDate(new Date().toISOString());
+  const activities = state.data.activities || [];
 
-  // ---- 汇总统计 ----
+  // ---- 为每件装备实时计算生命周期 ----
+  const lifecycles = new Map();
+  for (const g of active) {
+    lifecycles.set(g.slug, computeGearLifecycle(g, activities, today));
+  }
+
+  // ---- 汇总统计（基于实时计算，而非可能过时的 gear 字段）----
   let totalKm = 0, totalUse = 0, totalHours = 0;
   let mostUsed = null;
   const wearMap = new Map(); // slug -> status
   let attentionCount = 0;
+  let replaceCount = 0;
+  let idleCount = 0;
   for (const g of active) {
-    const km = Number(g.total_distance_km); if (!isNaN(km)) totalKm += km;
-    const uc = Number(g.usage_count); if (!isNaN(uc)) totalUse += uc;
-    const hr = Number(g.total_duration_hours); if (!isNaN(hr)) totalHours += hr;
-    if ((Number(g.usage_count) || 0) > (mostUsed ? Number(mostUsed.usage_count) || 0 : -1)) mostUsed = g;
-    const st = gearWearStatus(g, today);
+    const lc = lifecycles.get(g.slug);
+    totalKm += lc.total_distance_km;
+    totalUse += lc.usage_count;
+    totalHours += lc.total_duration_hours;
+    if (lc.usage_count > (mostUsed ? lifecycles.get(mostUsed.slug).usage_count : -1)) mostUsed = g;
+
+    const st = gearWearStatus(g, today, activities);
     wearMap.set(g.slug, st);
     if (st.level !== 'ok') attentionCount++;
+    if (st.level === 'alert') replaceCount++;
+    if (st.level === 'idle') idleCount++;
   }
 
   // ---- (a) 统计卡片行 ----
@@ -1775,8 +1998,8 @@ function gearUsageOverview(gearList) {
   statGrid.appendChild(statCard('累计总里程', num(totalKm, 0), 'km'));
   statGrid.appendChild(statCard('累计出勤', String(totalUse), `次 · ${num(totalHours, 0)}h`));
   statGrid.appendChild(statCard('最常用装备',
-    mostUsed && (Number(mostUsed.usage_count) || 0) > 0 ? (mostUsed.name || mostUsed.slug) : '—',
-    mostUsed && (Number(mostUsed.usage_count) || 0) > 0 ? `${mostUsed.usage_count} 次` : ''));
+    mostUsed && lifecycles.get(mostUsed.slug).usage_count > 0 ? (mostUsed.name || mostUsed.slug) : '—',
+    mostUsed && lifecycles.get(mostUsed.slug).usage_count > 0 ? `${lifecycles.get(mostUsed.slug).usage_count} 次` : ''));
   // 待关注卡片：可点击滚动到预警区
   const attnCard = statCard('待关注', String(attentionCount), '件');
   if (attentionCount > 0) {
@@ -1789,21 +2012,69 @@ function gearUsageOverview(gearList) {
   statGrid.appendChild(attnCard);
   box.appendChild(statGrid);
 
+  // ---- (a.5) Gear Health 摘要：替换 / 闲置 / 整体状态 ----
+  if (attentionCount > 0) {
+    const healthCard = el('div', { class: 'chart-card gear-health-section' });
+    healthCard.appendChild(el('h3', {}, 'Gear Health（AI 洞察）'));
+    const healthGrid = el('div', { class: 'stat-grid' });
+    const healthBadge = (label, count, cls) => {
+      const card = el('div', { class: 'stat-card ' + cls },
+        el('div', { class: 'label' }, label),
+        el('div', { class: 'value' }, String(count), el('span', { class: 'unit' }, ' 件'))
+      );
+      return card;
+    };
+    healthGrid.appendChild(healthBadge('建议更换', replaceCount, replaceCount ? 'health-critical' : 'health-ok'));
+    healthGrid.appendChild(healthBadge('久未使用', idleCount, idleCount ? 'health-warn' : 'health-ok'));
+    healthGrid.appendChild(healthBadge('状态良好', active.length - attentionCount, 'health-ok'));
+    healthCard.appendChild(healthGrid);
+
+    // Top 5 警报
+    const topAlerts = active
+      .map((g) => ({ g, st: wearMap.get(g.slug), lc: lifecycles.get(g.slug) }))
+      .filter((x) => x.st && x.st.level !== 'ok')
+      .sort((a, b) => {
+        const order = { alert: 0, warn: 1, idle: 2 };
+        return (order[a.st.level] - order[b.st.level]) ||
+          ((b.st.pctOfLife || 0) - (a.st.pctOfLife || 0));
+      })
+      .slice(0, 5);
+    const alertList = el('div', { class: 'rel-list' });
+    for (const { g, st } of topAlerts) {
+      const advice = gearAiAdvice(g, lifecycles.get(g.slug));
+      const item = el('div', { class: 'rel-item' },
+        el('div', { class: 'rel-info' },
+          el('div', { class: 'rel-name' }, g.name || g.slug),
+          el('div', { class: 'rel-brief gear-advice-line' }, advice)
+        ),
+        (() => {
+          const btn = el('button', { class: 'btn-sm' }, '详情');
+          btn.addEventListener('click', () => openGearDetail(g));
+          return btn;
+        })()
+      );
+      alertList.appendChild(item);
+    }
+    healthCard.appendChild(alertList);
+    box.appendChild(healthCard);
+  }
+
   // ---- (b) 使用排行（比例条，Top 8）----
   const ranked = active
-    .filter((g) => (Number(g.usage_count) || 0) > 0)
-    .sort((a, b) => (Number(b.usage_count) || 0) - (Number(a.usage_count) || 0))
+    .filter((g) => lifecycles.get(g.slug).usage_count > 0)
+    .sort((a, b) => lifecycles.get(b.slug).usage_count - lifecycles.get(a.slug).usage_count)
     .slice(0, 8);
   const rankCard = el('div', { class: 'chart-card' });
   rankCard.appendChild(el('h3', {}, '使用排行（按次数）'));
   if (!ranked.length) {
     rankCard.appendChild(el('div', { class: 'empty' }, '暂无使用记录'));
   } else {
-    const maxUse = Number(ranked[0].usage_count) || 1;
+    const maxUse = lifecycles.get(ranked[0].slug).usage_count || 1;
     const rank = el('div', { class: 'usage-rank' });
     for (const g of ranked) {
-      const uc = Number(g.usage_count) || 0;
-      const km = Number(g.total_distance_km) || 0;
+      const lc = lifecycles.get(g.slug);
+      const uc = lc.usage_count;
+      const km = lc.total_distance_km;
       const pct = Math.max(4, Math.round((uc / maxUse) * 100)); // 至少 4% 可见
       const row = el('div', { class: 'usage-rank-row', title: '点击查看详情' },
         el('div', { class: 'usage-rank-label' }, g.name || g.slug),
@@ -1836,12 +2107,14 @@ function gearUsageOverview(gearList) {
       : ['status-dot status-idle', 'wear-badge wear-idle', '久未使用'];
     for (const { g, st } of warned) {
       const [dotCls, cls, label] = badgeOf(st.level);
+      const lc = lifecycles.get(g.slug);
+      const advice = gearAiAdvice(g, lc);
       const item = el('div', { class: 'rel-item' },
         el('div', { class: 'rel-info' },
           el('div', { class: 'rel-name' },
             el('span', { class: cls }, [el('span', { class: dotCls }), ' ' + label]),
             ' ' + (g.name || g.slug)),
-          el('div', { class: 'rel-brief' }, st.reasons.join(' · '))
+          el('div', { class: 'rel-brief gear-advice-line' }, advice)
         ),
         (() => {
           const btn = el('button', { class: 'btn-sm' }, '详情');
@@ -2193,18 +2466,54 @@ function renderGearGroups(container, gearList) {
   }
 }
 
+/** 从装备的 price_history 或 price 字段获取当前价与趋势。 */
+function getGearPriceInfo(g) {
+  const history = Array.isArray(g.price_history) ? g.price_history : [];
+  if (!history.length && g.price == null) return null;
+  const current = history.length ? history[history.length - 1].price : Number(g.price);
+  if (!current || isNaN(current)) return null;
+  let trend = 'flat';
+  if (history.length >= 2) {
+    const prev = history[history.length - 2].price;
+    if (current > prev) trend = 'up';
+    else if (current < prev) trend = 'down';
+  }
+  const lowest = history.length ? Math.min(...history.map((h) => h.price)) : current;
+  return { current, trend, lowest, history };
+}
+
 /** 构建单个装备卡片 */
 function buildGearCard(g) {
   const card = el('div', { class: 'gear-card' + (g.condition === 'retired' ? ' gear-retired' : '') });
   const main = el('div', { class: 'gear-card-main' });
-  main.appendChild(el('div', { class: 'gear-name' }, g.name || g.slug || '—'));
+  const priceInfo = getGearPriceInfo(g);
+  const nameRow = el('div', { class: 'gear-name-row' });
+  nameRow.appendChild(el('span', { class: 'gear-name-text' }, g.name || g.slug || '—'));
+  if (priceInfo) {
+    const trendIcon = priceInfo.trend === 'up' ? '↗' : priceInfo.trend === 'down' ? '↘' : '→';
+    const trendCls = priceInfo.trend === 'up' ? 'price-trend-up' : priceInfo.trend === 'down' ? 'price-trend-down' : '';
+    nameRow.appendChild(el('span', { class: 'price-badge ' + trendCls, title: `历史最低 ¥${num(priceInfo.lowest, 0)}` }, `¥${num(priceInfo.current, 0)} ${trendIcon}`));
+  }
+  main.appendChild(nameRow);
+
+  // AI 生命周期洞察：基于 activities 实时计算
+  const today = fmtDate(new Date().toISOString());
+  const lc = computeGearLifecycle(g, state.data.activities || [], today);
+  const advice = gearAiAdvice(g, lc);
   main.appendChild(el('div', { class: 'gear-brief' },
-    [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, g.condition]
+    [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category)]
       .filter(Boolean).join(' · ') || '—'
   ));
+  if (advice) {
+    main.appendChild(el('div', { class: 'gear-advice' }, advice));
+  }
+
   const actions = el('div', { class: 'gear-card-actions' });
   actions.appendChild(el('button', { class: 'btn-sm', 'data-action': 'detail' }, '详情'));
   actions.appendChild(el('button', { class: 'btn-sm btn-primary', 'data-action': 'update' }, '更新'));
+  if (priceInfo || g.price != null) {
+    actions.appendChild(el('button', { class: 'btn-sm', 'data-action': 'price' }, '价格'));
+  }
   const isRetired = g.condition === 'retired';
   const retireBtn = el('button', { class: 'btn-sm' + (isRetired ? ' btn-primary' : ''), 'data-action': isRetired ? 'restore' : 'retire' }, isRetired ? '恢复' : '淘汰');
   actions.appendChild(retireBtn);
@@ -2217,6 +2526,8 @@ function buildGearCard(g) {
   // 事件绑定
   $('.btn-sm[data-action="detail"]', card).addEventListener('click', () => openGearDetail(g));
   $('.btn-sm[data-action="update"]', card).addEventListener('click', () => openGearUpdate(g));
+  const priceBtn = $('.btn-sm[data-action="price"]', card);
+  if (priceBtn) priceBtn.addEventListener('click', () => openGearPriceHistory(g));
   retireBtn.addEventListener('click', async () => {
     const nextCondition = isRetired ? 'good' : 'retired';
     retireBtn.disabled = true;
@@ -2291,6 +2602,152 @@ function openGearDetail(g) {
   }
 
   showModal(g.name || g.slug || '装备详情', wrap, [el('button', { class: 'btn', 'data-action': 'close' }, '关闭')]);
+}
+
+/** 打开装备价格追踪弹窗：历史记录 + 统计/AI 建议 + 手动录入/自动抓取。 */
+async function openGearPriceHistory(g) {
+  if (!state.token) { toast('请先连接', 'warn'); return; }
+
+  const wrap = el('div', {});
+  const historyList = el('div', { class: 'price-history-list' });
+  const statsArea = el('div', { class: 'price-stats-area' });
+  const actionArea = el('div', { class: 'price-action-area' });
+  const statusArea = el('div', { class: 'price-status-area' });
+
+  wrap.appendChild(statsArea);
+  wrap.appendChild(statusArea);
+  wrap.appendChild(el('div', { class: 'subsection-title' }, '价格记录'));
+  wrap.appendChild(historyList);
+  wrap.appendChild(el('div', { class: 'subsection-title' }, '添加/更新价格'));
+  wrap.appendChild(actionArea);
+
+  const platformMap = { jd: '京东', tmall: '天猫', amazon: '亚马逊', manual: '手动' };
+
+  async function refresh() {
+    try {
+      const data = await fetchGearPriceHistory(state.apiUrl, state.token, g.slug);
+      render(data);
+    } catch (err) {
+      statusArea.textContent = '';
+      statusArea.appendChild(el('div', { class: 'error-text' }, err.message || '加载失败'));
+    }
+  }
+
+  function render(data) {
+    const { history = [], stats = {}, suggestion = {} } = data;
+
+    // 统计区
+    statsArea.innerHTML = '';
+    const statGrid = el('div', { class: 'stat-grid' });
+    const st = (label, value, unit) => el('div', { class: 'stat-card' },
+      el('div', { class: 'label' }, label),
+      el('div', { class: 'value' }, value, unit ? el('span', { class: 'unit' }, ' ' + unit) : ''));
+    statGrid.appendChild(st('当前价', stats.current != null ? '¥' + num(stats.current, 0) : '—'));
+    statGrid.appendChild(st('最低价', stats.lowest != null ? '¥' + num(stats.lowest, 0) : '—'));
+    statGrid.appendChild(st('平均价', stats.average != null ? '¥' + num(stats.average, 0) : '—'));
+    statGrid.appendChild(st('记录数', String(stats.count || 0), '条'));
+    statsArea.appendChild(statGrid);
+
+    // AI 建议
+    statusArea.innerHTML = '';
+    if (suggestion.label) {
+      const badgeCls = suggestion.suggestion === 'buy_now' ? 'price-suggestion-buy' :
+        suggestion.suggestion === 'price_raised' ? 'price-suggestion-high' : 'price-suggestion-watch';
+      statusArea.appendChild(el('div', { class: 'price-suggestion ' + badgeCls },
+        el('strong', {}, suggestion.label),
+        el('span', {}, ' · ' + (suggestion.reasoning || ''))
+      ));
+    }
+
+    // 历史列表
+    historyList.innerHTML = '';
+    if (!history.length) {
+      historyList.appendChild(el('div', { class: 'empty' }, '暂无价格记录'));
+    } else {
+      const sorted = [...history].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      for (const h of sorted) {
+        historyList.appendChild(el('div', { class: 'price-history-row' },
+          el('span', { class: 'price-history-date' }, h.date),
+          el('span', { class: 'price-history-platform' }, platformMap[h.platform] || h.platform),
+          el('span', { class: 'price-history-price' }, '¥' + num(h.price, 0)),
+          h.note ? el('span', { class: 'price-history-note' }, h.note) : ''
+        ));
+      }
+    }
+  }
+
+  // 操作区：手动录入 + 自动抓取
+  const priceInput = el('input', { type: 'number', class: 'gear-select', placeholder: '价格（元）', style: 'flex:1;min-width:80px;' });
+  const platformSel = el('select', { class: 'gear-select', style: 'flex:1;min-width:100px;' },
+    el('option', { value: 'manual' }, '手动'),
+    el('option', { value: 'jd' }, '京东'),
+    el('option', { value: 'tmall' }, '天猫'),
+    el('option', { value: 'amazon' }, '亚马逊')
+  );
+  const noteInput = el('input', { type: 'text', class: 'gear-select', placeholder: '备注（可选）', style: 'flex:1 1 100%;min-width:80px;' });
+  const recordBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '记录价格');
+  recordBtn.addEventListener('click', async () => {
+    const price = Number(priceInput.value);
+    if (!price || price <= 0) { toast('请输入有效价格', 'warn'); return; }
+    recordBtn.disabled = true;
+    recordBtn.textContent = '保存中…';
+    try {
+      await fetchGearPriceRecord(state.apiUrl, state.token, g.slug, {
+        price,
+        platform: platformSel.value,
+        note: noteInput.value,
+      });
+      toast('价格已记录', 'success');
+      priceInput.value = '';
+      noteInput.value = '';
+      await refresh();
+      await loadAndRender(true);
+    } catch (err) {
+      toast(err.message || '记录失败', 'error');
+    } finally {
+      recordBtn.disabled = false;
+      recordBtn.textContent = '记录价格';
+    }
+  });
+
+  const fetchSel = el('select', { class: 'gear-select', style: 'flex:1;min-width:100px;' },
+    el('option', { value: '' }, '自动选择平台'),
+    el('option', { value: 'jd' }, '京东'),
+    el('option', { value: 'tmall' }, '天猫'),
+    el('option', { value: 'amazon' }, '亚马逊')
+  );
+  const fetchBtn = el('button', { class: 'btn', 'data-no-autoclose': '1' }, 'AI 自动抓取');
+  fetchBtn.addEventListener('click', async () => {
+    fetchBtn.disabled = true;
+    fetchBtn.textContent = '抓取中…';
+    try {
+      const data = await fetchGearPriceFetch(state.apiUrl, state.token, g.slug, fetchSel.value || undefined);
+      if (data.needs_manual) {
+        toast('自动抓取被拦截，请手动录入', 'warn');
+        statusArea.innerHTML = '';
+        statusArea.appendChild(el('div', { class: 'error-text' },
+          '电商页面已拦截自动抓取，请粘贴价格或截图后手动记录。'));
+      } else {
+        toast('已抓取并记录最新价格', 'success');
+        await refresh();
+        await loadAndRender(true);
+      }
+    } catch (err) {
+      toast(err.message || '抓取失败', 'error');
+    } finally {
+      fetchBtn.disabled = false;
+      fetchBtn.textContent = 'AI 自动抓取';
+    }
+  });
+
+  actionArea.appendChild(el('div', { class: 'form-row', style: 'flex-wrap:wrap;gap:10px;' }, priceInput, platformSel));
+  actionArea.appendChild(el('div', { class: 'form-row', style: 'flex-wrap:wrap;gap:10px;' }, noteInput));
+  actionArea.appendChild(el('div', { class: 'form-row', style: 'flex-wrap:wrap;gap:10px;' }, recordBtn));
+  actionArea.appendChild(el('div', { class: 'form-row', style: 'flex-wrap:wrap;gap:10px;align-items:center;' },
+    el('span', { style: 'color:var(--text-dim);font-size:13px;' }, '或'), fetchSel, fetchBtn));
+
+  showModal(g.name || g.slug || '价格追踪', wrap, [el('button', { class: 'btn' }, '关闭')]);
+  await refresh();
 }
 
 async function openGearUpdate(g) {
@@ -3045,6 +3502,13 @@ function openRecommendGear(preselectedRoute) {
           info.appendChild(el('div', { class: 'rel-brief' },
             [g.weight_g ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category), item.originalSlug !== item.currentSlug ? '已替换' : null]
               .filter(Boolean).join(' · ')));
+          if (item.reasoning && item.reasoning.chips && item.reasoning.chips.length) {
+            const chips = el('div', { class: 'reasoning-chips' });
+            for (const chip of item.reasoning.chips.slice(0, 3)) {
+              chips.appendChild(el('span', { class: 'reasoning-chip', title: item.reasoning.summary || '' }, chip));
+            }
+            info.appendChild(chips);
+          }
 
           // 替换下拉：同类别、在用、不是当前项
           const subSel = el('select', { class: 'gear-select', style: 'min-width:120px;' },
@@ -3152,9 +3616,9 @@ function openRecommendGear(preselectedRoute) {
       }
 
       lastResult = res;
-      workingGear = (res.gear || []).map((g) => ({ originalSlug: g.slug, currentSlug: g.slug, checked: true, days: g.days }));
+      workingGear = (res.gear || []).map((g) => ({ originalSlug: g.slug, currentSlug: g.slug, checked: true, days: g.days, reasoning: g.reasoning }));
       if (res.backpack) {
-        workingGear.push({ originalSlug: res.backpack.slug, currentSlug: res.backpack.slug, checked: true, days: null });
+        workingGear.push({ originalSlug: res.backpack.slug, currentSlug: res.backpack.slug, checked: true, days: null, reasoning: null });
       }
       renderResult();
       saveBtn.disabled = false;

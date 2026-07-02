@@ -552,7 +552,125 @@ canvas { width: 100%; display: block; }
 .gear-card-main { flex: 1; }
 .gear-name { font-weight: 600; margin-bottom: 4px; }
 .gear-brief { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.gear-advice {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 6px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  background: rgba(34, 197, 94, 0.08);
+  border-left: 3px solid var(--accent);
+  color: #bbf7d0;
+}
+.gear-advice:has(strong) { background: rgba(245, 158, 11, 0.08); border-left-color: var(--warn); color: #fde68a; }
+.gear-card.gear-retired .gear-advice { display: none; }
 .gear-card-actions { display: flex; gap: 8px; }
+
+/* Gear Health 摘要卡片 */
+.gear-health-section { margin-top: 0; }
+.gear-health-section .stat-grid { margin-bottom: 16px; }
+.health-ok { border-color: rgba(34, 197, 94, 0.35); }
+.health-ok .value { color: var(--accent); }
+.health-warn { border-color: rgba(245, 158, 11, 0.45); }
+.health-warn .value { color: var(--warn); }
+.health-critical { border-color: rgba(239, 68, 68, 0.5); }
+.health-critical .value { color: var(--danger); }
+.gear-advice-line {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* Recommendation reasoning chips */
+.reasoning-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.reasoning-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.10);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #bbf7d0;
+}
+.reasoning-chip-history {
+  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #bfdbfe;
+}
+.reasoning-chip-body {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #fde68a;
+}
+.reasoning-chip-issue {
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #fecaca;
+}
+
+/* Gear price tracking */
+.gear-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.gear-name-text {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.price-badge {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #bbf7d0;
+}
+.price-trend-up { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.3); color: #fecaca; }
+.price-trend-down { background: rgba(34, 197, 94, 0.16); border-color: rgba(34, 197, 94, 0.4); color: #86efac; }
+
+.price-history-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.price-history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.price-history-date { color: var(--text-dim); width: 90px; flex-shrink: 0; }
+.price-history-platform { color: var(--text-dim); width: 60px; flex-shrink: 0; }
+.price-history-price { font-weight: 700; color: var(--text); flex: 1; }
+.price-history-note { color: var(--text-muted); font-size: 12px; }
+
+.price-stats-area { margin-bottom: 12px; }
+.price-status-area { margin-bottom: 16px; }
+.price-suggestion {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.price-suggestion-buy { background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #bbf7d0; }
+.price-suggestion-watch { background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); color: #bfdbfe; }
+.price-suggestion-high { background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: #fde68a; }
+.price-action-area { display: flex; flex-direction: column; gap: 10px; }
 
 /* ---------- 按钮 ---------- */
 .btn, .btn-sm {
