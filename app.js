@@ -969,6 +969,9 @@ function statCard(label, value, unit) {
 function activityTable(acts) {
   // slug → 装备对象，供行点击时快速取装备（避免每行 O(n) 查找）
   const gearMap = new Map((state.data.gear || []).map((g) => [g.slug, g]));
+  // 跑步显示精确时长 + 配速；徒步/爬山显示普通时长
+  const hasRun = acts.some(isRunning);
+
   const wrap = el('div', { class: 'table-wrap' });
   const table = el('table');
   const headerCells = [
@@ -979,8 +982,6 @@ function activityTable(acts) {
     el('th', {}, '距离'),
     el('th', {}, '爬升'),
   ];
-  // 跑步显示精确时长 + 配速；徒步/爬山显示普通时长
-  const hasRun = acts.some(isRunning);
   headerCells.push(el('th', {}, '时长'));
   if (hasRun) headerCells.push(el('th', {}, '配速'));
   headerCells.push(el('th', {}, '平均心率'), el('th', {}, '感受'), el('th', {}, '装备'));
