@@ -400,6 +400,13 @@ function fmtDate(d) {
   return String(d).slice(0, 10);
 }
 
+/** 把可能包含空对象的字符串数组格式化为「、」分隔的可读文本。 */
+function fmtStringList(arr) {
+  if (!Array.isArray(arr)) return arr;
+  const filtered = arr.map((x) => (x && typeof x === 'object' ? '' : String(x))).filter((s) => s && s !== '[object Object]');
+  return filtered.length ? filtered.join('、') : null;
+}
+
 /** 把小时数格式化为 HH:MM:SS，用于跑步等需要精确到秒的场景。 */
 function fmtDuration(hours) {
   if (hours == null || isNaN(Number(hours))) return '—';
@@ -1851,8 +1858,8 @@ function openRouteDetail(r) {
     ['难度', r.difficulty],
     ['预计时长', r.estimated_hours != null ? num(r.estimated_hours) + ' h' : null],
     ['地形', Array.isArray(r.terrain) ? r.terrain.join('、') : r.terrain],
-    ['最佳季节', Array.isArray(r.best_seasons) ? r.best_seasons.join('、') : r.best_seasons],
-    ['水源', Array.isArray(r.water_sources) ? r.water_sources.join('、') : r.water_sources],
+    ['最佳季节', fmtStringList(r.best_seasons)],
+    ['水源', fmtStringList(r.water_sources)],
     ['GPX', r.gpx_file],
     ['来源', r.source_url],
     ['备注', r.notes],
@@ -1903,8 +1910,8 @@ function routeFactList(r) {
     ['难度', r.difficulty],
     ['预计时长', r.estimated_hours != null ? num(r.estimated_hours) + ' h' : null],
     ['地形', Array.isArray(r.terrain) ? r.terrain.join('、') : r.terrain],
-    ['最佳季节', Array.isArray(r.best_seasons) ? r.best_seasons.join('、') : r.best_seasons],
-    ['水源', Array.isArray(r.water_sources) ? r.water_sources.join('、') : r.water_sources],
+    ['最佳季节', fmtStringList(r.best_seasons)],
+    ['水源', fmtStringList(r.water_sources)],
     ['备注', r.notes],
   ].filter(([, v]) => v != null && v !== '');
   const list = el('ul', { class: 'detail-list' });
