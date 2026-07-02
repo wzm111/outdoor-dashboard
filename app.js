@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v24-2026-07-02';
+const APP_VERSION = 'v25-2026-07-02';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -512,6 +512,15 @@ const GEAR_LIFECYCLE_THRESHOLDS = {
 };
 const IDLE_WARN_DAYS = 180; // 用过但超过半年没再用 → 闲置提醒
 const IDLE_REPLACE_DAYS = 365; // 超过一年未使用 → 建议淘汰
+
+/** 计算两个日期字符串之间的天数（a 到 b）。
+ *  支持 'YYYY-MM-DD' 或 ISO 字符串；非法日期返回 null。 */
+function daysBetween(a, b) {
+  const x = Date.parse(String(a).slice(0, 10));
+  const y = Date.parse(String(b).slice(0, 10));
+  if (isNaN(x) || isNaN(y)) return null;
+  return Math.round((y - x) / 86400000);
+}
 
 /** 从 activities 实时计算一件装备的完整生命周期数据。
  *  返回：
