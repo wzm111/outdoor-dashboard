@@ -881,3 +881,81 @@ textarea { resize: vertical; }
   border-radius: var(--radius-sm);
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ---------- 离线状态条（B2） ---------- */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 250;
+  padding: 10px 16px;
+  font-size: 13px;
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+.offline-banner.offline {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+}
+.offline-banner.syncing {
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.35);
+}
+/* banner 占用顶部空间，主看板整体下移 */
+body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
+
+/* ---------- 拍照/扫码录入（B1） ---------- */
+.photo-modal .modal-tabs { margin-bottom: 16px; }
+.photo-panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.photo-panel p {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.photo-file-input {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: var(--bg-input);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.photo-file-input:hover { border-color: var(--accent); }
+.barcode-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- 页脚备份操作 ---------- */
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.footer-actions { display: flex; gap: 12px; }
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+.link-btn:hover { color: var(--accent); }

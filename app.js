@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v25-2026-07-02';
+const APP_VERSION = 'v26-2026-07-03';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -20,6 +20,17 @@ const state = {
   data: null, // { profile, gear[], routes[], activities[], body_logs[], plans[], segments[] }
 };
 
+// 离线状态与队列（B2）
+const offlineState = {
+  isOnline: navigator.onLine,
+  cachedAt: null,
+  pendingCount: 0,
+  flushing: false,
+};
+const IDB_NAME = 'outdoor-dashboard';
+const IDB_STORE = 'mutation-queue';
+const IDB_VERSION = 1;
+
 // 装备库搜索/筛选/排序状态：跨重渲染保留（淘汰/恢复后 loadAndRender 不丢用户当前的筛选）
 const gearFilter = {
   q: '',            // 搜索关键词（名称/品牌/型号/slug/备注）
@@ -27,6 +38,315 @@ const gearFilter = {
   status: 'active', // active(仅在用) / retired(仅淘汰) / all(全部)
   sort: 'category', // category / name / weight / usage
 };
+
+// ---------- 离线支持（B2） ----------
+
+function openIdb() {
+  return new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) return resolve(null);
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGetAll() {
+  const db = await openIdb();
+  if (!db) return [];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbAdd(record) {
+  const db = await openIdb();
+  if (!db) throw new Error('浏览器不支持 IndexedDB，无法离线排队');
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.add(record);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbDelete(id) {
+  const db = await openIdb();
+  if (!db) return;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** 序列化一个变更请求到 IndexedDB 队列。 */
+async function enqueueMutation({ method, url, headers, body }) {
+  const record = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random(),
+    createdAt: new Date().toISOString(),
+    method,
+    url,
+    headers,
+    body,
+  };
+  await idbAdd(record);
+  offlineState.pendingCount = (await idbGetAll()).length;
+  updateOfflineBanner();
+  registerBackgroundSync();
+  return record;
+}
+
+/** 把当前 state.data 写回 localStorage 作为离线快照。 */
+async function saveSnapshot() {
+  if (!state.data) return;
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(state.data));
+    offlineState.cachedAt = new Date().toISOString();
+  } catch { /* 隐私模式/容量满时忽略 */ }
+}
+
+/** 注册后台同步，让浏览器在联网后自动唤醒 flush（PWA/移动端有效）。 */
+function registerBackgroundSync() {
+  if (!('serviceWorker' in navigator) || !('SyncManager' in window)) return;
+  navigator.serviceWorker.ready
+    .then((reg) => reg.sync.register('flush-mutations'))
+    .catch(() => {});
+}
+
+/** 刷新顶部离线/同步状态条。 */
+function updateOfflineBanner() {
+  let banner = $('#offline-banner');
+  if (!banner) {
+    banner = el('div', { id: 'offline-banner', class: 'offline-banner' });
+    document.body.insertBefore(banner, document.body.firstChild);
+  }
+
+  const age = offlineState.cachedAt
+    ? Math.max(0, Math.round((Date.now() - new Date(offlineState.cachedAt).getTime()) / 60000))
+    : null;
+
+  if (offlineState.isOnline && offlineState.pendingCount === 0) {
+    banner.hidden = true;
+    banner.className = 'offline-banner';
+    return;
+  }
+
+  if (!offlineState.isOnline) {
+    banner.hidden = false;
+    banner.className = 'offline-banner offline';
+    banner.textContent = age != null
+      ? `当前离线，显示 ${age} 分钟前缓存数据 · ${offlineState.pendingCount} 条修改待同步`
+      : `当前离线 · ${offlineState.pendingCount} 条修改待同步`;
+    return;
+  }
+
+  if (offlineState.pendingCount > 0) {
+    banner.hidden = false;
+    banner.className = 'offline-banner syncing';
+    banner.textContent = `正在同步 ${offlineState.pendingCount} 条修改…`;
+  }
+}
+
+/** 按顺序重放队列中的请求。 */
+async function flushQueue() {
+  if (offlineState.flushing || !navigator.onLine) return;
+  offlineState.flushing = true;
+  updateOfflineBanner();
+
+  try {
+    let queue = await idbGetAll();
+    queue.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    while (queue.length > 0) {
+      const item = queue[0];
+      try {
+        const res = await fetchWithTimeout(item.url, {
+          method: item.method,
+          headers: item.headers,
+          body: item.body,
+        }, 30000, '同步离线修改');
+
+        if (res.status === 401) {
+          toast('离线同步暂停：登录已过期，请重新连接', 'error');
+          break;
+        }
+        if (!res.ok) {
+          // 非 401 错误先跳过，下次再试
+          throw new Error(`HTTP ${res.status}`);
+        }
+        await idbDelete(item.id);
+      } catch (err) {
+        console.log('离线同步单项失败:', err.message || err);
+        break; // 顺序执行，失败则暂停，下次再试
+      }
+      queue = await idbGetAll();
+      queue.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      offlineState.pendingCount = queue.length;
+      updateOfflineBanner();
+    }
+  } finally {
+    offlineState.flushing = false;
+    offlineState.pendingCount = (await idbGetAll()).length;
+    updateOfflineBanner();
+    // 同步完成后拉取一次最新服务端状态
+    if (navigator.onLine && state.token) {
+      try { await loadAndRender(true); } catch { /* ignore */ }
+    }
+  }
+}
+
+/** 初始化离线检测与同步监听。 */
+function initOffline() {
+  window.addEventListener('online', () => {
+    offlineState.isOnline = true;
+    updateOfflineBanner();
+    flushQueue();
+  });
+  window.addEventListener('offline', () => {
+    offlineState.isOnline = false;
+    updateOfflineBanner();
+  });
+
+  // Service Worker 后台同步消息
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'FLUSH_QUEUE') {
+        flushQueue();
+      }
+    });
+  }
+
+  // 页面加载时若已有快照，记录缓存时间
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const meta = localStorage.getItem(CACHE_KEY + '-meta');
+      offlineState.cachedAt = meta ? JSON.parse(meta).cachedAt : new Date().toISOString();
+    }
+  } catch {}
+
+  updateOfflineBanner();
+}
+
+/** 导出 JSON 应急备份：包含当前数据 + 离线待同步队列。 */
+async function exportBackup() {
+  const queue = await idbGetAll();
+  const blob = {
+    version: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: state.data,
+    pendingQueue: queue,
+  };
+  const dataStr = JSON.stringify(blob, null, 2);
+  const blobObj = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blobObj);
+  const a = el('a', { href: url, download: `outdoor-dashboard-backup-${new Date().toISOString().slice(0, 10)}.json` });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('已导出 JSON 应急备份', 'success');
+}
+
+/** 导入 JSON 应急备份。在线时走 /sync import；离线时把变更加入队列。 */
+async function importBackup(file) {
+  if (!file) return;
+  let blob;
+  try {
+    const text = await file.text();
+    blob = JSON.parse(text);
+  } catch (err) {
+    toast('备份文件解析失败：' + (err.message || err), 'error');
+    return;
+  }
+
+  if (!blob.data) {
+    toast('备份文件缺少 data 字段', 'error');
+    return;
+  }
+
+  // 1. 恢复本地快照
+  state.data = blob.data;
+  await saveSnapshot();
+  renderAll();
+
+  // 2. 处理待同步队列（如果有）
+  const queue = Array.isArray(blob.pendingQueue) ? blob.pendingQueue : [];
+  for (const item of queue) {
+    if (item && item.method && item.url) {
+      await enqueueMutation({ method: item.method, url: item.url, headers: item.headers, body: item.body });
+    }
+  }
+
+  // 3. 在线时整体再推一次 sync import（更可靠）
+  if (navigator.onLine && state.token) {
+    try {
+      const payload = {
+        action: 'import',
+        data: {
+          gear: (state.data.gear || []).map((g) => ({ slug: g.slug, data: g })),
+          routes: (state.data.routes || []).map((r) => ({ slug: r.slug, data: r })),
+          activities: (state.data.activities || []).map((a) => ({ date: a.date, route: a.route || '', data: a })),
+          body: (state.data.body_logs || []).map((b) => ({ date: b.date, data: b })),
+          plans: (state.data.plans || []).map((p) => ({ id: p.id, plan_type: p.plan_type || 'trip', date: p.date, route: p.route || '', data: p })),
+        },
+      };
+      await fetchWithTimeout(`${apiBase(state.apiUrl)}/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${state.token}`,
+        },
+        body: JSON.stringify(payload),
+      }, 60000, '导入备份');
+      toast('备份已同步到云端', 'success');
+      await loadAndRender(true);
+      return;
+    } catch (err) {
+      toast('在线同步备份失败，已加入离线队列：' + (err.message || err), 'warn');
+    }
+  }
+
+  updateOfflineBanner();
+  toast('备份已恢复到本地，联网后将自动同步', 'info');
+}
+
+/** 统一的离线感知变更请求包装。
+ * 在线时直接请求；离线时入队并执行乐观更新。 */
+async function mutateRequest({ url, options, label, optimistic }) {
+  if (navigator.onLine) {
+    const res = await fetchWithTimeout(url, options, 30000, label);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`${label}失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
+    }
+    return res.json().catch(() => ({ ok: true }));
+  }
+
+  await enqueueMutation({
+    method: options.method,
+    url,
+    headers: options.headers,
+    body: options.body,
+  });
+  if (optimistic) optimistic();
+  updateOfflineBanner();
+  return { ok: true, queued: true };
+}
 
 // ---------- 工具 ----------
 
@@ -444,7 +764,8 @@ function renderActivityAiResult(container, parsed, provider) {
 
 /** 更新单条活动：PUT /activities/:id。 */
 async function fetchUpdateActivity(apiUrl, token, id, payload) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/activities/${encodeURIComponent(id)}`, {
+  const url = `${apiBase(apiUrl)}/activities/${encodeURIComponent(id)}`;
+  const options = {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -452,18 +773,25 @@ async function fetchUpdateActivity(apiUrl, token, id, payload) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  }, 15000, '更新活动');
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`更新活动失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '更新活动',
+    optimistic: () => {
+      const idx = state.data.activities.findIndex((a) => String(a.id) === String(id));
+      if (idx >= 0) state.data.activities[idx] = { ...state.data.activities[idx], ...payload.data };
+      renderActivities();
+      saveSnapshot();
+    },
+  });
 }
 
 /** 写回单条活动的 gear_used：走 /sync import 的 activities upsert（onConflict date+route，无需 id）。
  *  整行覆盖，故必须回传完整 data 和 raw_markdown。 */
 async function fetchSaveActivity(apiUrl, token, payload) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/sync`, {
+  const url = `${apiBase(apiUrl)}/sync`;
+  const options = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -471,16 +799,22 @@ async function fetchSaveActivity(apiUrl, token, payload) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({ action: 'import', data: { activities: [payload] } }),
-  }, 15000, '保存活动装备');
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`保存失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
-  }
-  const json = await res.json().catch(() => ({}));
-  // import 返回 { activities: { success, count } | { error } }
-  const r = json && (json.activities || (json.results && json.results.activities));
-  if (r && r.error) throw new Error(`保存失败: ${String(r.error).slice(0, 120)}`);
-  return json;
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '保存活动装备',
+    optimistic: () => {
+      const merged = { ...payload.data };
+      const idx = state.data.activities.findIndex((a) =>
+        String(a.date) === String(merged.date) && String(a.route) === String(merged.route));
+      if (idx >= 0) state.data.activities[idx] = { ...state.data.activities[idx], ...merged };
+      else state.data.activities.push(merged);
+      state.data.activities.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      renderActivities();
+      saveSnapshot();
+    },
+  });
 }
 
 
@@ -861,18 +1195,28 @@ async function fetchWithTimeout(url, options, timeoutMs, label) {
 
 /** 通用删除请求。 */
 async function fetchDelete(apiUrl, token, entity, id) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/${entity}/${encodeURIComponent(id)}`, {
+  const url = `${apiBase(apiUrl)}/${entity}/${encodeURIComponent(id)}`;
+  const options = {
     method: 'DELETE',
     headers: {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-  }, 15000, '删除');
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`删除失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
-  }
-  return res.json().catch(() => ({ deleted: true }));
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '删除',
+    optimistic: () => {
+      const key = entity === 'body' ? 'body_logs' : entity;
+      const arr = state.data[key];
+      if (!Array.isArray(arr)) return;
+      const pk = entity === 'plans' ? 'id' : entity === 'body' ? 'date' : 'slug';
+      state.data[key] = arr.filter((item) => String(item[pk]) !== String(id));
+      renderAll();
+      saveSnapshot();
+    },
+  });
 }
 
 async function fetchToken(apiUrl, secret) {
@@ -908,7 +1252,8 @@ async function fetchExport(apiUrl, token) {
 }
 
 async function fetchSaveGear(apiUrl, token, slug, data) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}`, {
+  const url = `${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}`;
+  const options = {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -916,12 +1261,20 @@ async function fetchSaveGear(apiUrl, token, slug, data) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(data),
-  }, 15000, '保存装备');
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`保存装备失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '保存装备',
+    optimistic: () => {
+      const merged = { slug, ...data.data };
+      const idx = state.data.gear.findIndex((g) => g.slug === slug);
+      if (idx >= 0) state.data.gear[idx] = { ...state.data.gear[idx], ...merged };
+      else state.data.gear.push(merged);
+      renderGear();
+      saveSnapshot();
+    },
+  });
 }
 
 async function fetchGearPriceHistory(apiUrl, token, slug) {
@@ -940,7 +1293,8 @@ async function fetchGearPriceHistory(apiUrl, token, slug) {
 }
 
 async function fetchGearPriceRecord(apiUrl, token, slug, payload) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}/price/record`, {
+  const url = `${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}/price/record`;
+  const options = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -948,16 +1302,26 @@ async function fetchGearPriceRecord(apiUrl, token, slug, payload) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  }, 15000, '记录价格');
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`记录价格失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '记录价格',
+    optimistic: () => {
+      const g = state.data.gear.find((x) => x.slug === slug);
+      if (!g) return;
+      if (!g.price_history) g.price_history = [];
+      g.price_history.push({ date: payload.date || new Date().toISOString().slice(0, 10), ...payload });
+      if (payload.price != null) g.price = payload.price;
+      renderGear();
+      saveSnapshot();
+    },
+  });
 }
 
 async function fetchGearPriceFetch(apiUrl, token, slug, platform) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}/price/fetch`, {
+  const url = `${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}/price/fetch`;
+  const options = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -965,12 +1329,8 @@ async function fetchGearPriceFetch(apiUrl, token, slug, platform) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(platform ? { platform } : {}),
-  }, 30000, '自动抓取价格');
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`抓取价格失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({ url, options, label: '自动抓取价格' });
 }
 
 async function fetchScrapeGear(apiUrl, token, url) {
@@ -1063,7 +1423,8 @@ async function fetchAiActivity(apiUrl, token, text) {
 
 /** 保存单条身体记录：PUT /body/:date（存在则更新、不存在则插入）。 */
 async function fetchSaveBody(apiUrl, token, date, data, rawMarkdown) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/body/${encodeURIComponent(date)}`, {
+  const url = `${apiBase(apiUrl)}/body/${encodeURIComponent(date)}`;
+  const options = {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -1071,17 +1432,27 @@ async function fetchSaveBody(apiUrl, token, date, data, rawMarkdown) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({ data, raw_markdown: rawMarkdown }),
-  }, 15000, '保存身体记录');
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`保存身体记录失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '保存身体记录',
+    optimistic: () => {
+      const merged = { date, ...data };
+      const idx = state.data.body_logs.findIndex((b) => String(b.date) === String(date));
+      if (idx >= 0) state.data.body_logs[idx] = { ...state.data.body_logs[idx], ...merged };
+      else state.data.body_logs.push(merged);
+      state.data.body_logs.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      renderBody();
+      saveSnapshot();
+    },
+  });
 }
 
 /** 保存单条路线：PUT /routes/:slug（存在则更新、不存在则插入）。body = { data, raw_markdown? }。 */
 async function fetchSaveRoute(apiUrl, token, slug, payload) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/routes/${encodeURIComponent(slug)}`, {
+  const url = `${apiBase(apiUrl)}/routes/${encodeURIComponent(slug)}`;
+  const options = {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -1089,12 +1460,20 @@ async function fetchSaveRoute(apiUrl, token, slug, payload) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  }, 15000, '保存路线');
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`保存路线失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '保存路线',
+    optimistic: () => {
+      const merged = { slug, ...payload.data };
+      const idx = state.data.routes.findIndex((r) => r.slug === slug);
+      if (idx >= 0) state.data.routes[idx] = { ...state.data.routes[idx], ...merged };
+      else state.data.routes.push(merged);
+      renderRoutes();
+      saveSnapshot();
+    },
+  });
 }
 
 /** 请求装备推荐：POST /recommend。 */
@@ -1117,7 +1496,8 @@ async function fetchRecommend(apiUrl, token, payload) {
 
 /** 保存计划：POST /plans。 */
 async function fetchSavePlan(apiUrl, token, payload) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/plans`, {
+  const url = `${apiBase(apiUrl)}/plans`;
+  const options = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1125,12 +1505,21 @@ async function fetchSavePlan(apiUrl, token, payload) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  }, 15000, '保存计划');
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`保存计划失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '保存计划',
+    optimistic: () => {
+      const merged = { id: payload.id || ('offline-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))), ...payload };
+      const idx = state.data.plans.findIndex((p) => p.id != null && String(p.id) === String(merged.id));
+      if (idx >= 0) state.data.plans[idx] = { ...state.data.plans[idx], ...merged };
+      else state.data.plans.push(merged);
+      state.data.plans.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      renderPlans();
+      saveSnapshot();
+    },
+  });
 }
 
 // ---------- 登录流程 ----------
@@ -1236,7 +1625,11 @@ async function loadAndRender(isRefresh = false) {
       plans: unwrapList(raw.plans),
       segments: unwrapList(raw.segments),
     };
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch {}
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(state.data));
+      offlineState.cachedAt = new Date().toISOString();
+      try { localStorage.setItem(CACHE_KEY + '-meta', JSON.stringify({ cachedAt: offlineState.cachedAt })); } catch {}
+    } catch {}
     renderAll();
     showDashboard();
     $('#sync-status').textContent = '✓ 已同步';
@@ -2295,12 +2688,14 @@ function renderGear() {
     el('span', {}, `装备库（${allGear.length}）`),
     el('div', { style: 'display:flex;gap:8px;' },
       el('button', { class: 'btn-sm', 'data-action': 'add-gear' }, '添加装备'),
-      el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-ai' }, 'AI 添加')
+      el('button', { class: 'btn-sm', 'data-action': 'add-ai' }, 'AI 添加'),
+      el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-photo' }, '📷 拍照添加')
     )
   );
   view.appendChild(headerRow);
   $('.btn-sm[data-action="add-gear"]', headerRow).addEventListener('click', () => openAddGear());
   $('.btn-sm[data-action="add-ai"]', headerRow).addEventListener('click', () => openAddGearByAi());
+  $('.btn-sm[data-action="add-photo"]', headerRow).addEventListener('click', () => openAddGearByPhoto());
 
   if (!allGear.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无装备'));
@@ -2953,6 +3348,155 @@ function openAddGearByAi() {
   content.appendChild(actions);
   content.appendChild(resultArea);
   showModal('AI 添加装备', content, []);
+}
+
+/** 把用户选择的图片压缩成 base64 JPEG，减少上传体积。 */
+function resizeImageFile(file, maxWidth = 1024, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round(height * maxWidth / width);
+        width = maxWidth;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('图片加载失败'));
+    };
+    img.src = url;
+  });
+}
+
+/** 尝试从图片中解码条码/二维码。优先用原生 BarcodeDetector，否则返回 null 让后端识别。 */
+async function decodeBarcodeFromFile(file) {
+  if (!('BarcodeDetector' in window)) return null;
+  try {
+    const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] });
+    const barcodes = await detector.detect(file);
+    if (barcodes && barcodes.length) return barcodes[0].rawValue || null;
+  } catch {}
+  return null;
+}
+
+async function fetchAiGearImage(apiUrl, token, imageDataUrl, barcodeHint) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/ai/gear-image`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ image_base64: imageDataUrl, barcode: barcodeHint || undefined }),
+  }, 60000, 'AI 拍照识别装备');
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`拍照识别失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
+/** 通过拍照/条码识别添加新装备（B1）。 */
+function openAddGearByPhoto() {
+  if (!navigator.onLine) {
+    toast('拍照识别需要联网，已切换到文字 AI 识别', 'info');
+    openAddGearByAi();
+    return;
+  }
+
+  const content = el('div', { class: 'photo-modal' });
+  const resultArea = el('div', { class: 'scrape-result' });
+
+  // 拍照识别面板
+  const photoPanel = el('div', { class: 'photo-panel' },
+    el('p', {}, '拍摄或选择装备照片，AI 会自动识别名称、品牌、类别、重量等字段。'),
+    el('input', {
+      type: 'file',
+      accept: 'image/*',
+      capture: 'environment',
+      class: 'photo-file-input',
+    })
+  );
+
+  // 条码识别面板
+  const barcodePanel = el('div', { class: 'photo-panel', hidden: true },
+    el('p', {}, '对准装备条码/二维码拍照，系统会自动解码并识别商品。'),
+    el('input', {
+      type: 'file',
+      accept: 'image/*',
+      capture: 'environment',
+      class: 'photo-file-input',
+    }),
+    el('div', { class: 'barcode-hint' })
+  );
+
+  let currentMode = 'photo';
+  function switchPhotoMode(mode) {
+    currentMode = mode;
+    photoTab.classList.toggle('active', mode === 'photo');
+    barcodeTab.classList.toggle('active', mode === 'barcode');
+    photoPanel.hidden = mode !== 'photo';
+    barcodePanel.hidden = mode !== 'barcode';
+    resultArea.innerHTML = '';
+  }
+
+  const tabs = el('div', { class: 'modal-tabs' });
+  const photoTab = el('button', { class: 'modal-tab-btn active' }, '📷 拍装备');
+  const barcodeTab = el('button', { class: 'modal-tab-btn' }, '🔍 扫条码');
+  photoTab.addEventListener('click', () => switchPhotoMode('photo'));
+  barcodeTab.addEventListener('click', () => switchPhotoMode('barcode'));
+  tabs.appendChild(photoTab);
+  tabs.appendChild(barcodeTab);
+
+  async function handleFile(file, mode) {
+    if (!file) return;
+    resultArea.innerHTML = el('div', { class: 'empty' }, '正在压缩并识别…').outerHTML;
+
+    let barcodeHint = null;
+    if (mode === 'barcode') {
+      barcodeHint = await decodeBarcodeFromFile(file);
+      const hintEl = $('.barcode-hint', barcodePanel);
+      if (hintEl) {
+        hintEl.textContent = barcodeHint
+          ? `已识别条码：${barcodeHint}，将用于辅助识别`
+          : '未识别到条码，将把照片交给 AI 识别';
+      }
+    }
+
+    try {
+      const dataUrl = await resizeImageFile(file);
+      const res = await fetchAiGearImage(state.apiUrl, state.token, dataUrl, barcodeHint);
+      if (!res.ok || !res.data) {
+        throw new Error(res.error || 'AI 未返回有效字段');
+      }
+      const merged = { ...res.data, condition: 'good' };
+      const slug = slugifyGear(merged.name, merged.brand, merged.model);
+      const original = { slug };
+      renderScrapeResult(resultArea, merged, original, res.provider);
+    } catch (err) {
+      resultArea.innerHTML = '';
+      resultArea.appendChild(el('div', { class: 'error-text' }, err.message || '拍照识别失败'));
+    }
+  }
+
+  $('.photo-file-input', photoPanel).addEventListener('change', (e) => handleFile(e.target.files[0], 'photo'));
+  $('.photo-file-input', barcodePanel).addEventListener('change', (e) => handleFile(e.target.files[0], 'barcode'));
+
+  content.appendChild(tabs);
+  content.appendChild(photoPanel);
+  content.appendChild(barcodePanel);
+  content.appendChild(resultArea);
+  showModal('拍照/扫码添加装备', content, []);
 }
 
 function renderScrapeResult(container, merged, original, provider) {
@@ -3694,7 +4238,8 @@ function openRecommendGear(preselectedRoute) {
 
 /** 更新计划：PUT /plans/:id。 */
 async function fetchUpdatePlan(apiUrl, token, id, payload) {
-  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/plans/${encodeURIComponent(id)}`, {
+  const url = `${apiBase(apiUrl)}/plans/${encodeURIComponent(id)}`;
+  const options = {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -3702,12 +4247,18 @@ async function fetchUpdatePlan(apiUrl, token, id, payload) {
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
-  }, 15000, '更新计划');
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`更新计划失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
-  }
-  return res.json();
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '更新计划',
+    optimistic: () => {
+      const idx = state.data.plans.findIndex((p) => String(p.id) === String(id));
+      if (idx >= 0) state.data.plans[idx] = { ...state.data.plans[idx], ...payload.data };
+      renderPlans();
+      saveSnapshot();
+    },
+  });
 }
 
 function buildPlanMarkdown(data) {
@@ -3918,6 +4469,15 @@ function init() {
     $('#loading').hidden = true;
   });
 
+  // 应急备份导出/导入
+  $('#export-backup-btn').addEventListener('click', exportBackup);
+  $('#import-backup-btn').addEventListener('click', () => $('#import-backup-input').click());
+  $('#import-backup-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) importBackup(file);
+    e.target.value = ''; // 允许重复导入同一文件
+  });
+
   // 自动连接：只要输入框里已有 API 地址 + 密钥就尝试连一次。
   // 不只看 localStorage——即便密钥还没被「记住」（saveConfig 未跑过），
   // 只要框里预填了值也自动连，避免用户以为填了就行、却停在登录框干等。
@@ -3939,6 +4499,8 @@ function init() {
       navigator.serviceWorker.register('service-worker.js').catch(() => {});
     });
   }
+
+  initOffline();
 }
 
 document.addEventListener('DOMContentLoaded', init);

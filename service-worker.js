@@ -6,7 +6,7 @@
  * - API 请求（/auth/token、/sync）一律走网络，绝不缓存（含密钥/JWT，且数据要新鲜）。
  *   离线时的数据回退由 app.js 用 localStorage 快照处理，不在 SW 层缓存响应。
  */
-const CACHE = 'outdoor-dashboard-v25';
+const CACHE = 'outdoor-dashboard-v26';
 // 核心外壳：必须全部缓存成功（addAll 原子操作），缺一不可离线运行
 const SHELL = [
   './',
@@ -63,4 +63,15 @@ self.addEventListener('fetch', (event) => {
       return res;
     }).catch(() => caches.match(req)) // 离线兜底：回退到缓存的外壳
   );
+});
+
+// 后台同步：浏览器联网后唤醒页面 flush 离线变更队列
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'flush-mutations') {
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window' }).then((clients) => {
+        clients.forEach((client) => client.postMessage({ type: 'FLUSH_QUEUE' }));
+      })
+    );
+  }
 });
