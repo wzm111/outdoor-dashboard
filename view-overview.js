@@ -27,7 +27,7 @@ function recentConditionText(cond) {
   return map[cond] || cond;
 }
 
-function renderProfileCard(profile) {
+function renderProfileCard(profile, bodyAgeResult) {
   if (!profile || !Object.keys(profile).length) return null;
 
   const level = String(profile.fitness_level || '');
@@ -45,6 +45,16 @@ function renderProfileCard(profile) {
     { label: '耐热', value: profile.heat_tolerance ? toleranceText(profile.heat_tolerance, 'heat') : null, unit: '', icon: '🥵' },
     { label: '近期状态', value: profile.recent_condition ? recentConditionText(profile.recent_condition) : null, unit: '', icon: '✨' },
   ].filter((m) => m.value != null && m.value !== '');
+
+  if (bodyAgeResult && bodyAgeResult.body_age != null) {
+    const deltaText = bodyAgeResult.delta === 0 ? '' : `(${bodyAgeResult.delta > 0 ? '+' : ''}${bodyAgeResult.delta})`;
+    metrics.push({
+      label: '身体年龄',
+      value: bodyAgeResult.body_age,
+      unit: `岁 ${deltaText}`,
+      icon: '🧬',
+    });
+  }
 
   const issues = Array.isArray(profile.common_issues)
     ? profile.common_issues.filter((i) => i && String(i).trim() !== '')
@@ -125,22 +135,25 @@ function renderOverview() {
     .reduce((s, a) => s + (Number(a.distance_km) || 0), 0);
 
   const profile = d.profile || {};
+  const bodyAgeResult = computeBodyAge(profile, acts, d.body_logs || []);
 
   const view = viewEl('overview');
   view.innerHTML = '';
-  view.appendChild(
-    el('div', { class: 'stat-grid' },
-      statCard('总活动', acts.length, '次'),
-      statCard('累计里程', num(totalDist, 1), 'km'),
-      statCard('近 30 天里程', num(dist30, 1), 'km'),
-      statCard('累计爬升', num(totalGain, 0), 'm'),
-      statCard('累计时长', num(totalHours, 1), 'h'),
-      statCard('装备数', d.gear.length, '件'),
-    )
-  );
+
+  const statGrid = el('div', { class: 'stat-grid' });
+  statGrid.appendChild(statCard('总活动', acts.length, '次'));
+  statGrid.appendChild(statCard('累计里程', num(totalDist, 1), 'km'));
+  statGrid.appendChild(statCard('近 30 天里程', num(dist30, 1), 'km'));
+  statGrid.appendChild(statCard('累计爬升', num(totalGain, 0), 'm'));
+  statGrid.appendChild(statCard('累计时长', num(totalHours, 1), 'h'));
+  statGrid.appendChild(statCard('装备数', d.gear.length, '件'));
+  if (bodyAgeResult && bodyAgeResult.body_age != null) {
+    statGrid.appendChild(bodyAgeStatCard(bodyAgeResult));
+  }
+  view.appendChild(statGrid);
 
   // 档案卡片
-  const profileCard = renderProfileCard(profile);
+  const profileCard = renderProfileCard(profile, bodyAgeResult);
   if (profileCard) {
     view.appendChild(el('div', { class: 'section-title' }, '体能档案'));
     view.appendChild(profileCard);
@@ -158,6 +171,21 @@ function renderOverview() {
   } else {
     view.appendChild(el('div', { class: 'empty' }, '暂无活动记录'));
   }
+}
+
+function bodyAgeStatCard(result) {
+  const delta = result.delta;
+  const extraClass = delta < 0 ? 'stat-younger' : delta > 0 ? 'stat-older' : '';
+  const deltaText = delta === 0 ? '与实际年龄一致' : delta < 0 ? `比实际年轻 ${Math.abs(delta)} 岁` : `比实际增加 ${delta} 岁`;
+  const confidenceText = result.confidence === 'low' ? '（估算中）' : '';
+
+  const card = el('div', { class: `stat-card stat-card-body-age ${extraClass}` },
+    el('div', { class: 'label' }, '身体年龄'),
+    el('div', { class: 'value' }, String(result.body_age), el('span', { class: 'unit' }, ' 岁')),
+    el('div', { class: 'body-age-delta' }, deltaText + confidenceText)
+  );
+  card.addEventListener('click', () => openBodyAgeDetail(result));
+  return card;
 }
 
 function statCard(label, value, unit) {

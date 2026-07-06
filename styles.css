@@ -1211,7 +1211,30 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 .stat-card.stat-ok { background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.25); }
 .stat-card.stat-ok .value { color: #86efac; }
 
-.segment-table {
+/* 身体年龄卡片 */
+.stat-card.stat-card-body-age { cursor: pointer; }
+.stat-card.stat-younger { background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.3); }
+.stat-card.stat-younger .value { color: #86efac; }
+.stat-card.stat-older { background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); }
+.stat-card.stat-older .value { color: #fca5a5; }
+.body-age-delta { font-size: 12px; margin-top: 4px; color: var(--text-dim); }
+
+.body-age-detail { font-size: 14px; }
+.body-age-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
+.body-age-detail-main { display: flex; flex-direction: column; }
+.body-age-detail-number { font-size: 36px; font-weight: 700; }
+.body-age-detail-delta { font-size: 14px; margin-top: 4px; }
+.body-age-detail-delta.positive { color: #86efac; }
+.body-age-detail-delta.negative { color: #fca5a5; }
+.body-age-detail-meta { font-size: 13px; color: var(--text-dim); text-align: right; }
+.body-age-detail-section { margin-bottom: 16px; }
+.body-age-detail-section h4 { margin: 0 0 8px; font-size: 14px; color: var(--text); }
+.body-age-detail-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.body-age-detail-table th,
+.body-age-detail-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border-subtle); }
+.body-age-detail-table th { color: var(--text-dim); font-weight: 500; }
+.body-age-detail-missing ul { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 13px; }
+.body-age-detail-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-dim); }
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
