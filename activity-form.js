@@ -114,11 +114,11 @@ function openAddActivity(activity = null) {
   const problemsInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.problems_count != null ? activity.problems_count : '', placeholder: '完成线路数', style: 'width:100%;' });
   const attemptsInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.attempts != null ? activity.attempts : '', placeholder: '尝试次数', style: 'width:100%;' });
   const climbingSection = el('div', { class: 'sport-fields', 'data-sport': 'climbing' },
-    el('div', { class: 'form-row' }, el('label', {}, '细分类型'), disciplineSel),
-    el('div', { class: 'form-row' }, el('label', {}, '难度'), gradeInput),
-    el('div', { class: 'form-row' }, el('label', {}, '完攀方式'), sendTypeSel),
-    el('div', { class: 'form-row' }, el('label', {}, '完成线路数'), problemsInput),
-    el('div', { class: 'form-row' }, el('label', {}, '尝试次数'), attemptsInput)
+    el('div', { class: 'form-row' }, el('label', {}, '细分类型（可选）'), disciplineSel),
+    el('div', { class: 'form-row' }, el('label', {}, '难度（可选）'), gradeInput),
+    el('div', { class: 'form-row' }, el('label', {}, '完攀方式（可选）'), sendTypeSel),
+    el('div', { class: 'form-row' }, el('label', {}, '完成线路数（可选）'), problemsInput),
+    el('div', { class: 'form-row' }, el('label', {}, '尝试次数（可选）'), attemptsInput)
   );
 
   // ---------- 骑行专项 ----------
@@ -182,9 +182,16 @@ function openAddActivity(activity = null) {
     const date = dateInput.value;
     const route = routeInput.value.trim();
     const type = typeSel.value;
-    const distance = Number(distInput.value);
-    if (!date || !route || isNaN(distance) || distance <= 0) {
-      toast('请填写日期、路线和有效距离', 'warn');
+    const sport = activitySport(type);
+    const distance = distInput.value ? Number(distInput.value) : undefined;
+
+    if (!date || !route) {
+      toast('请填写日期和路线', 'warn');
+      return;
+    }
+    // 距离：跑步/徒步/骑行建议填写；攀岩/其他不强制
+    if (sport !== 'climbing' && sport !== 'other' && (isNaN(distance) || distance <= 0)) {
+      toast('请填写有效距离', 'warn');
       return;
     }
 
