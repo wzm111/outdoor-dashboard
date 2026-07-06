@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v27-2026-07-06';
+const APP_VERSION = 'v28-2026-07-06';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -499,6 +499,15 @@ function activitiesUsingGear(slug) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
+/** 计算同一天同路线下的下一个 sequence：自动让多条活动并存。 */
+function nextActivitySequence(date, route) {
+  const same = (state.data.activities || []).filter(
+    (a) => String(a.date) === String(date) && String(a.route) === String(route)
+  );
+  const maxSeq = same.reduce((m, a) => Math.max(m, Number(a.sequence) || 0), -1);
+  return maxSeq + 1;
+}
+
 // ---------- 活动 gear_used 写回 ----------
 
 /** 把编辑后的 slug 列表序列化成 frontmatter 里的 gear_used YAML 块。
@@ -642,7 +651,7 @@ function openAddActivity(activity = null) {
       gear_used: activity ? gearSlugsOf(activity) : [],
     };
     const rawMarkdown = buildActivityMarkdown(data);
-    const payload = {
+    const payloadBase = {
       date: data.date,
       route: data.route,
       data,
@@ -652,9 +661,17 @@ function openAddActivity(activity = null) {
     saveBtn.textContent = '保存中…';
     try {
       if (activity && activity.id) {
-        await fetchUpdateActivity(state.apiUrl, state.token, activity.id, payload);
+        // 编辑：如果 date/route 变了，按新组合重新分配 sequence；否则保留原 sequence
+        const dateChanged = String(data.date) !== String(activity.date);
+        const routeChanged = String(data.route) !== String(activity.route);
+        const sequence = (dateChanged || routeChanged)
+          ? nextActivitySequence(data.date, data.route)
+          : (activity.sequence ?? 0);
+        await fetchUpdateActivity(state.apiUrl, state.token, activity.id, { ...payloadBase, sequence });
       } else {
-        await fetchSaveActivity(state.apiUrl, state.token, payload);
+        // 新增：自动分配下一个 sequence，避免覆盖同一天同路线已有记录
+        const sequence = nextActivitySequence(data.date, data.route);
+        await fetchSaveActivity(state.apiUrl, state.token, { ...payloadBase, sequence });
       }
       toast('活动已保存', 'success');
       close();
@@ -746,6 +763,7 @@ function renderActivityAiResult(container, parsed, provider) {
       const payload = {
         date: data.date,
         route: data.route || '活动',
+        sequence: nextActivitySequence(data.date, data.route || '活动'),
         data,
         raw_markdown: buildActivityMarkdown(data),
       };
@@ -780,14 +798,20 @@ async function fetchUpdateActivity(apiUrl, token, id, payload) {
     label: '更新活动',
     optimistic: () => {
       const idx = state.data.activities.findIndex((a) => String(a.id) === String(id));
-      if (idx >= 0) state.data.activities[idx] = { ...state.data.activities[idx], ...payload.data };
+      if (idx >= 0) {
+        state.data.activities[idx] = {
+          ...state.data.activities[idx],
+          ...payload.data,
+          sequence: payload.sequence,
+        };
+      }
       renderActivities();
       saveSnapshot();
     },
   });
 }
 
-/** 写回单条活动的 gear_used：走 /sync import 的 activities upsert（onConflict date+route，无需 id）。
+/** 保存活动：走 /sync import 的 activities upsert（onConflict date+route+sequence）。
  *  整行覆盖，故必须回传完整 data 和 raw_markdown。 */
 async function fetchSaveActivity(apiUrl, token, payload) {
   const url = `${apiBase(apiUrl)}/sync`;
@@ -805,12 +829,18 @@ async function fetchSaveActivity(apiUrl, token, payload) {
     options,
     label: '保存活动装备',
     optimistic: () => {
-      const merged = { ...payload.data };
+      const merged = { ...payload.data, sequence: payload.sequence ?? 0 };
       const idx = state.data.activities.findIndex((a) =>
-        String(a.date) === String(merged.date) && String(a.route) === String(merged.route));
+        String(a.date) === String(merged.date) &&
+        String(a.route) === String(merged.route) &&
+        Number(a.sequence || 0) === Number(merged.sequence || 0));
       if (idx >= 0) state.data.activities[idx] = { ...state.data.activities[idx], ...merged };
       else state.data.activities.push(merged);
-      state.data.activities.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      state.data.activities.sort((a, b) => {
+        const dateCmp = String(b.date).localeCompare(String(a.date));
+        if (dateCmp !== 0) return dateCmp;
+        return (a.sequence || 0) - (b.sequence || 0);
+      });
       renderActivities();
       saveSnapshot();
     },
@@ -1114,6 +1144,7 @@ function unwrap(row) {
   if ('name' in row && flat.name == null) flat.name = row.name;
   if ('plan_type' in row) flat.plan_type = row.plan_type;
   if ('id' in row) flat.id = row.id;
+  if ('sequence' in row) flat.sequence = row.sequence;
   // 保留原始 Markdown（脚本侧 _unwrap 同名约定）：写回时需回传，且要在其中同步 frontmatter 的 gear_used 块。
   if ('raw_markdown' in row) flat._raw_markdown = row.raw_markdown;
   return flat;
@@ -1718,7 +1749,11 @@ function renderOverview() {
 
   // 最近活动
   view.appendChild(el('div', { class: 'section-title' }, '最近活动'));
-  const recent = [...acts].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
+  const recent = [...acts].sort((a, b) => {
+    const dateCmp = String(b.date).localeCompare(String(a.date));
+    if (dateCmp !== 0) return dateCmp;
+    return (a.sequence || 0) - (b.sequence || 0);
+  }).slice(0, 5);
   if (recent.length) {
     view.appendChild(activityTable(recent));
   } else {
@@ -1762,9 +1797,10 @@ function activityTable(acts) {
     const pace = running ? paceMinPerKm(a.distance_km, a.duration_hours) : null;
     const duration = running ? fmtDuration(a.duration_hours) : num(a.duration_hours) + ' h';
     const gearCount = gearSlugsOf(a).length;
+    const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
     const cells = [
       el('td', {}, fmtDate(a.date)),
-      el('td', { class: 'col-location' }, hasRun ? (a.notes || a.route || '—') : (a.route || '—')),
+      el('td', { class: 'col-location' }, hasRun ? (a.notes || routeText) : routeText),
       el('td', {}, a.type || '—'),
       el('td', { class: 'num' }, running ? num(a.distance_km, 2) + ' km' : num(a.distance_km) + ' km'),
       el('td', { class: 'num' }, num(a.elevation_gain_m, 0) + ' m'),
@@ -1783,7 +1819,8 @@ function activityTable(acts) {
     const delBtn = el('button', { class: 'btn-sm btn-danger-outline' }, '删除');
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm(`确定删除 ${fmtDate(a.date)} · ${a.route || '活动'} 吗？此操作不可恢复。`)) return;
+      const routeLabel = (a.route || '活动') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
+      if (!confirm(`确定删除 ${fmtDate(a.date)} · ${routeLabel} 吗？此操作不可恢复。`)) return;
       try {
         await fetchDelete(state.apiUrl, state.token, 'activities', a.id);
         toast('已删除', 'success');
@@ -1937,6 +1974,7 @@ function openActivityGear(activity, gearMap) {
       const payload = {
         date: activity.date,
         route: activity.route,
+        sequence: activity.sequence ?? 0,
         data,
         raw_markdown: rawRes.text,
       };
@@ -1991,7 +2029,11 @@ function buildActivityMarkdown(data) {
 }
 
 function renderActivities() {
-  const acts = [...state.data.activities].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const acts = [...state.data.activities].sort((a, b) => {
+    const dateCmp = String(b.date).localeCompare(String(a.date));
+    if (dateCmp !== 0) return dateCmp;
+    return (a.sequence || 0) - (b.sequence || 0);
+  });
   const view = viewEl('activities');
   view.innerHTML = '';
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
