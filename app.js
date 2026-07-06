@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v26-2026-07-03';
+const APP_VERSION = 'v27-2026-07-06';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -1113,6 +1113,7 @@ function unwrap(row) {
   if ('route' in row && flat.route == null) flat.route = row.route;
   if ('name' in row && flat.name == null) flat.name = row.name;
   if ('plan_type' in row) flat.plan_type = row.plan_type;
+  if ('id' in row) flat.id = row.id;
   // 保留原始 Markdown（脚本侧 _unwrap 同名约定）：写回时需回传，且要在其中同步 frontmatter 的 gear_used 块。
   if ('raw_markdown' in row) flat._raw_markdown = row.raw_markdown;
   return flat;
