@@ -311,6 +311,40 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .subsection-title:first-child { margin-top: 0; }
 
+/* 活动页运动类型 Tab */
+.activity-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 18px 0 14px;
+}
+.activity-tab {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.activity-tab:hover { border-color: var(--accent); color: var(--text); }
+.activity-tab.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+/* 表单中按运动类型条件显示的专项字段分组 */
+.sport-fields {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.sport-fields[hidden] { display: none; }
+
 /* 徽标 / 标签 */
 .badge {
   display: inline-block;

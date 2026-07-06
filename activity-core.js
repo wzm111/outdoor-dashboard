@@ -110,11 +110,24 @@ function renderActivityAiResult(container, parsed, provider) {
     ['时长', parsed.duration_hours != null ? parsed.duration_hours + ' h' : null],
     ['平均心率', parsed.avg_hr],
     ['最大心率', parsed.max_hr],
+    ['配速', parsed.avg_pace],
+    ['步频', parsed.cadence],
+    ['结束日期', parsed.end_date],
+    ['最高海拔', parsed.max_altitude_m != null ? parsed.max_altitude_m + ' m' : null],
+    ['路况', parsed.trail_condition],
+    ['负重', typeof loadTypeLabel === 'function' ? loadTypeLabel(parsed.load_type) : parsed.load_type],
+    ['细分类型', typeof disciplineLabel === 'function' ? disciplineLabel(parsed.discipline) : parsed.discipline],
+    ['难度', parsed.grade],
+    ['线路数', parsed.problems_count],
+    ['完攀方式', typeof sendTypeLabel === 'function' ? sendTypeLabel(parsed.send_type) : parsed.send_type],
+    ['骑行类型', typeof cyclingTypeLabel === 'function' ? cyclingTypeLabel(parsed.cycling_type) : parsed.cycling_type],
+    ['均速', parsed.avg_speed_kmh != null ? parsed.avg_speed_kmh + ' km/h' : null],
+    ['平均功率', parsed.power_avg_w != null ? parsed.power_avg_w + ' W' : null],
     ['感受', parsed.felt],
     ['装备', Array.isArray(parsed.gear_used) ? parsed.gear_used.join('、') : parsed.gear_used],
     ['问题', Array.isArray(parsed.issues) ? parsed.issues.join('、') : parsed.issues],
     ['备注', parsed.notes],
-  ].filter(([, v]) => v != null && v !== '');
+  ].filter(([, v]) => v != null && v !== '' && v !== '—');
   const list = el('ul', { class: 'detail-list' });
   for (const [k, v] of facts) list.appendChild(el('li', {}, el('strong', {}, k + '：'), document.createTextNode(String(v))));
   container.appendChild(list);

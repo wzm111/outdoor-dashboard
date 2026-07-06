@@ -241,3 +241,28 @@ function paceMinPerKm(distanceKm, hours) {
 function isRunning(a) {
   return /run|跑步|配速/i.test(String(a.type || ''));
 }
+
+/** 判断活动是否为攀岩/抱石。 */
+function isClimbing(a) {
+  return /climb|攀岩|抱石|boulder/i.test(String(a.type || ''));
+}
+
+/** 判断活动是否为骑行。 */
+function isCycling(a) {
+  return /cycl|骑行|骑车/i.test(String(a.type || ''));
+}
+
+/** 由距离和时长计算平均速度（km/h）。 */
+function avgSpeedKmh(distanceKm, hours) {
+  const d = Number(distanceKm);
+  const t = Number(hours);
+  if (!d || !t || d <= 0 || t <= 0) return null;
+  return d / t;
+}
+
+/** 把速度格式化为 "32.1 km/h"。 */
+function fmtSpeed(kmh) {
+  const n = Number(kmh);
+  if (kmh == null || isNaN(n)) return '—';
+  return num(n, 1) + ' km/h';
+}
