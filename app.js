@@ -137,10 +137,10 @@ function init() {
     console.log('🟡 [init] 不自动连接，停在登录框等手动点击');
   }
 
-  // 注册 service worker（PWA）
+  // 注册 service worker（PWA），加版本戳避免旧 SW 被 CDN/浏览器缓存钉死
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+      navigator.serviceWorker.register(`service-worker.js?v=${window.__APP_VERSION || Date.now()}`).catch(() => {});
     });
   }
 
