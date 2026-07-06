@@ -6,7 +6,7 @@
 'use strict';
 
 // 运行时版本号：每次改前端 bump 一次，方便在 Console 里核对当前跑的是不是新版（window.__APP_VERSION）
-const APP_VERSION = 'v28-2026-07-06';
+const APP_VERSION = 'v29-2026-07-06';
 window.__APP_VERSION = APP_VERSION;
 console.log('%c[户外看板] app.js 已加载 版本=' + APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
 
@@ -1700,6 +1700,113 @@ function viewEl(name) { return $(`.view[data-view="${name}"]`); }
 
 // ---------- 总览 ----------
 
+function fitnessLevelText(level) {
+  const map = { beginner: '入门', intermediate: '进阶', advanced: '精英' };
+  return map[level] || level;
+}
+
+function toleranceText(tol, type) {
+  const map = { low: type === 'cold' ? '怕冷' : '怕热', medium: '一般', high: type === 'cold' ? '耐寒' : '耐热' };
+  return map[tol] || tol;
+}
+
+function issueText(issue) {
+  const map = {
+    knee: '膝盖不适', knee_sore_downhill: '下坡膝痛', it_band: '髂胫束', blisters: '水泡',
+    ankle: '脚踝', shin: '胫骨痛', calf: '小腿', hip: '髋部', back: '腰背',
+    shoulder: '肩部', neck: '颈部', foot: '足底', plantar_fasciitis: '足底筋膜炎', achilles: '跟腱',
+  };
+  return map[issue] || issue;
+}
+
+function recentConditionText(cond) {
+  const map = { good: '状态良好', fair: '状态一般', poor: '状态欠佳', tired: '偏疲劳', injured: '有伤病' };
+  return map[cond] || cond;
+}
+
+function renderProfileCard(profile) {
+  if (!profile || !Object.keys(profile).length) return null;
+
+  const level = String(profile.fitness_level || '');
+  const levelClass = level === 'beginner' ? 'beginner' : level === 'advanced' ? 'advanced' : '';
+  const levelText = fitnessLevelText(level) || '未设置';
+
+  const metrics = [
+    { label: '周目标', value: profile.weekly_mileage_km != null ? num(profile.weekly_mileage_km, 0) : null, unit: 'km', icon: '🎯' },
+    { label: '平路配速', value: profile.typical_pace_flat, unit: '', icon: '🏃' },
+    { label: '爬坡配速', value: profile.typical_pace_climb, unit: '', icon: '⛰️' },
+    { label: '体重', value: profile.weight_kg != null ? num(profile.weight_kg, 1) : null, unit: 'kg', icon: '⚖️' },
+    { label: '年龄', value: profile.age, unit: '岁', icon: '🎂' },
+    { label: '最大心率', value: profile.usual_heart_rate_max, unit: 'bpm', icon: '❤️' },
+    { label: '耐寒', value: profile.cold_tolerance ? toleranceText(profile.cold_tolerance, 'cold') : null, unit: '', icon: '🥶' },
+    { label: '耐热', value: profile.heat_tolerance ? toleranceText(profile.heat_tolerance, 'heat') : null, unit: '', icon: '🥵' },
+    { label: '近期状态', value: profile.recent_condition ? recentConditionText(profile.recent_condition) : null, unit: '', icon: '✨' },
+  ].filter((m) => m.value != null && m.value !== '');
+
+  const issues = Array.isArray(profile.common_issues)
+    ? profile.common_issues.filter((i) => i && String(i).trim() !== '')
+    : (profile.common_issues ? [profile.common_issues] : []);
+
+  const goals = Array.isArray(profile.goals)
+    ? profile.goals.filter((g) => g && String(g).trim() !== '')
+    : [];
+
+  const card = el('div', { class: 'profile-card' });
+
+  const header = el('div', { class: 'profile-header' },
+    el('div', { class: 'profile-header-main' },
+      el('div', { class: 'profile-avatar' }, '⛰️'),
+      el('div', { class: 'profile-title' },
+        el('h3', {}, '体能档案'),
+        el('div', { class: 'profile-meta-row' },
+          profile.name ? el('span', { class: 'profile-name' }, profile.name) : null,
+          el('span', { class: `profile-level-badge ${levelClass}` }, levelText)
+        )
+      )
+    )
+  );
+  card.appendChild(header);
+
+  if (metrics.length) {
+    const grid = el('div', { class: 'profile-grid' });
+    for (const m of metrics) {
+      grid.appendChild(
+        el('div', { class: 'profile-metric' },
+          el('div', { class: 'profile-metric-label' }, m.icon, m.label),
+          el('div', { class: 'profile-metric-value' }, String(m.value), m.unit ? el('span', { class: 'profile-metric-unit' }, m.unit) : null)
+        )
+      );
+    }
+    card.appendChild(grid);
+  }
+
+  if (issues.length) {
+    const section = el('div', { class: 'profile-section' },
+      el('div', { class: 'profile-section-title' }, '需关注'),
+      el('div', { class: 'profile-issues' },
+        ...issues.map((i) => el('span', { class: 'profile-issue' }, '🔔 ', issueText(i)))
+      )
+    );
+    card.appendChild(section);
+  } else if (metrics.length) {
+    const section = el('div', { class: 'profile-section' },
+      el('div', { class: 'profile-section-title' }, '常见不适'),
+      el('div', { class: 'profile-issues' }, el('span', { class: 'profile-issue positive' }, '✅ 暂无记录'))
+    );
+    card.appendChild(section);
+  }
+
+  if (goals.length) {
+    const section = el('div', { class: 'profile-section' },
+      el('div', { class: 'profile-section-title' }, '当前目标'),
+      el('div', { class: 'profile-goals' }, ...goals.map((g) => el('div', { class: 'profile-goal' }, String(g))))
+    );
+    card.appendChild(section);
+  }
+
+  return card;
+}
+
 function renderOverview() {
   const d = state.data;
   const acts = d.activities;
@@ -1730,21 +1837,10 @@ function renderOverview() {
   );
 
   // 档案卡片
-  if (Object.keys(profile).length) {
+  const profileCard = renderProfileCard(profile);
+  if (profileCard) {
     view.appendChild(el('div', { class: 'section-title' }, '体能档案'));
-    const rows = [
-      ['体能水平', profile.fitness_level],
-      ['周里程目标', profile.weekly_mileage_km != null ? profile.weekly_mileage_km + ' km' : null],
-      ['平路配速', profile.typical_pace_flat],
-      ['爬坡配速', profile.typical_pace_climb],
-      ['怕冷', profile.cold_tolerance],
-      ['常见不适', Array.isArray(profile.common_issues) ? profile.common_issues.join('、') : profile.common_issues],
-    ].filter(([, v]) => v != null && v !== '');
-    const card = el('div', { class: 'card' });
-    for (const [k, v] of rows) {
-      card.appendChild(el('div', {}, el('span', { class: 'badge' }, k), ' ', String(v)));
-    }
-    view.appendChild(card);
+    view.appendChild(profileCard);
   }
 
   // 最近活动
