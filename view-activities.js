@@ -58,6 +58,18 @@ function loadTypeLabel(t) {
   return { heavy: '重装', light: '轻装', ultralight: '超轻' }[t] || t || '—';
 }
 
+/** 计算徒步活动天数：无 end_date 为 1 天；跨日期为包含首尾的天数。 */
+function hikingDays(start, end) {
+  if (!start) return 1;
+  if (!end || end === start) return 1;
+  const s = new Date(String(start).slice(0, 10));
+  const e = new Date(String(end).slice(0, 10));
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return 1;
+  const ms = e.getTime() - s.getTime();
+  const days = Math.round(ms / 86400000) + 1;
+  return days > 1 ? days : 1;
+}
+
 // ---------- 表格单元格辅助 ----------
 
 function td(content, cls) {
@@ -94,9 +106,11 @@ const SPORT_TABLE_COLUMNS = {
     },
   },
   hiking: {
-    headers: ['日期', '路线', '距离', '爬升', '下降', '最高海拔', '路况', '负重', '感受', '装备'],
+    headers: ['日期', '路线', '距离', '爬升', '下降', '最高海拔', '路况', '负重', '天数', '感受', '装备'],
     cells: (a) => {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
+      const days = hikingDays(a.date, a.end_date);
+      const daysText = days > 1 ? `${days} 天` : '1 天';
       const dateText = a.end_date ? `${fmtDate(a.date)} ~ ${fmtDate(a.end_date)}` : fmtDate(a.date);
       return [
         td(dateText),
@@ -107,6 +121,7 @@ const SPORT_TABLE_COLUMNS = {
         td(a.max_altitude_m ? num(a.max_altitude_m, 0) + ' m' : '—', 'num'),
         td(a.trail_condition || '—'),
         td(loadTypeLabel(a.load_type)),
+        td(daysText, 'num'),
         td(feltStars(a.felt)),
         td(gearCell(a), 'num'),
       ];
