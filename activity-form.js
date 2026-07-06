@@ -194,7 +194,6 @@ function openAddActivity(activity = null) {
       toast('请填写有效距离', 'warn');
       return;
     }
-
     // 以旧记录为基础合并，避免丢失其他运动的旧字段
     const base = activity ? { ...activity } : {};
     delete base._raw_markdown;
@@ -219,7 +218,6 @@ function openAddActivity(activity = null) {
       gear_used: activity ? gearSlugsOf(activity) : [],
     };
 
-    const sport = activitySport(type);
     const sportData = {};
     if (sport === 'running') {
       if (cadenceInput.value) sportData.cadence = Number(cadenceInput.value);
