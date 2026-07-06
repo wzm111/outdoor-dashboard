@@ -1,0 +1,243 @@
+/* 通用工具函数 */
+'use strict';
+
+// ---------- 工具 ----------
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') node.className = v;
+    else if (k === 'html') node.innerHTML = v;
+    else if (v != null) node.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null) continue;
+    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return node;
+}
+
+/** 从用户粘贴的商品规格文本中，尽可能提取结构化字段。 */
+function parseSpecText(text) {
+  const out = {};
+  if (!text) return out;
+  const t = String(text);
+
+  // 重量：匹配 "重量：380g" / "约 380 克" / "380g" 等
+  const weightMatch = t.match(/(?:重量|净重|约)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(g|克|kg|千克|lb|磅)/i);
+  if (weightMatch) {
+    const v = Number(weightMatch[1]);
+    const unit = weightMatch[2].toLowerCase();
+    out.weight_g = unit.startsWith('kg') || unit.startsWith('千克') ? Math.round(v * 1000)
+      : unit.startsWith('lb') || unit.startsWith('磅') ? Math.round(v * 453.592)
+      : Math.round(v);
+  }
+
+  // 防水 / 透气
+  if (/gore-tex|event|pertex|h2no|dry.q|防水|waterproof/i.test(t)) {
+    out.waterproof = true;
+  }
+  if (/gore-tex|透气|breathable|吸湿排汗/i.test(t)) {
+    if (out.breathable == null) out.breathable = true;
+  }
+
+  // 材质 / 面料
+  const matMatch = t.match(/(?:材质|面料|fabric|material)[:：]?\s*([^\n，。]+)/i);
+  if (matMatch) out.material = matMatch[1].trim();
+
+  // 价格
+  const priceMatch = t.match(/(?:价格|售价|京东价|天猫价|到手价)[:：]?\s*[¥￥$€]?\s*(\d+(?:\.\d+)?)/);
+  if (priceMatch) out.price = Number(priceMatch[1]);
+
+  // 颜色 / 尺码
+  const colorMatch = t.match(/(?:颜色|适用性别|颜色类别)[:：]?\s*([^\n，。]+)/i);
+  if (colorMatch) out.color = colorMatch[1].trim();
+  const sizeMatch = t.match(/(?:尺码|尺寸|size)[:：]?\s*([^\n，。]+)/i);
+  if (sizeMatch) out.size = sizeMatch[1].trim();
+
+  // 户外相关：保暖等级、季节、适用地形
+  const warmthMatch = t.match(/(?:保暖|厚度|warmth)[:：]?\s*(none|light|medium|heavy|无|轻|中|厚)/i);
+  if (warmthMatch) {
+    const map = { 无: 'none', 轻: 'light', 中: 'medium', 厚: 'heavy' };
+    out.warmth = map[warmthMatch[1]] || warmthMatch[1].toLowerCase();
+  }
+  const seasonMatch = t.match(/(?:季节|seasons?)[:：]?\s*([^\n，。]+)/i);
+  if (seasonMatch) {
+    out.seasons = seasonMatch[1].split(/[,，/、]/).map((s) => s.trim()).filter(Boolean);
+  }
+  const terrainMatch = t.match(/(?:地形|terrain)[:：]?\s*([^\n，。]+)/i);
+  if (terrainMatch) {
+    out.terrain = terrainMatch[1].split(/[,，/、]/).map((s) => s.trim()).filter(Boolean);
+  }
+
+  return out;
+}
+
+/** 创建并显示一个模态弹窗。返回关闭函数。 */
+function showModal(title, contentNode, buttons = []) {
+  const overlay = el('div', { class: 'modal-overlay' });
+  const box = el('div', { class: 'modal-box' });
+  const header = el('div', { class: 'modal-header' },
+    el('span', {}, title),
+    el('button', { class: 'modal-close', 'aria-label': '关闭' }, '×')
+  );
+  const body = el('div', { class: 'modal-body' });
+  body.appendChild(contentNode);
+  const footer = el('div', { class: 'modal-footer' });
+
+  box.appendChild(header);
+  box.appendChild(body);
+  if (buttons.length) box.appendChild(footer);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const close = () => overlay.remove();
+  const closeBtn = $('.modal-close', overlay);
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  for (const b of buttons) {
+    // 底部按钮默认点击关闭弹窗；带 data-no-autoclose 的按钮由调用方自行控制关闭时机
+    footer.appendChild(b);
+    if (b.getAttribute && b.getAttribute('data-no-autoclose') != null) continue;
+    b.addEventListener('click', close);
+  }
+
+  return close;
+}
+
+/** 把两个对象浅合并：src 非 null 字段覆盖 dst。 */
+function mergeGearData(dst, src) {
+  const out = { ...dst };
+  for (const [k, v] of Object.entries(src)) {
+    if (v != null && v !== '') out[k] = v;
+  }
+  return out;
+}
+
+/** 把扁平对象重新包成 Edge Function 保存 gear 时需要的 { data, raw_markdown? } 结构。 */
+function packGearPayload(data) {
+  const copy = { ...data };
+  delete copy.slug;
+  delete copy._raw_markdown;
+  delete copy._updated_at;
+  delete copy._path;
+  return { data: copy };
+}
+
+/** 从装备对象里取出可用的商品 URL。 */
+function getGearSourceUrl(g) {
+  return g.source_url || g.url || g.link || g.purchase_url || '';
+}
+
+/** 从活动的 gear_used 中提取干净的 slug 列表。
+ *  gear_used 元素混合：多为 slug 字符串，少数是 dict（{slug:...} 或空 {}）。
+ *  两种都兼容，过滤掉 {} / 空值。 */
+function gearSlugsOf(activity) {
+  const gu = activity && activity.gear_used;
+  if (!Array.isArray(gu)) return [];
+  return gu
+    .map((e) => (typeof e === 'string' ? e : (e && e.slug) || ''))
+    .filter(Boolean);
+}
+
+/** 反查：某件装备（按 slug）上过哪些活动，按日期倒序。 */
+function activitiesUsingGear(slug) {
+  if (!slug) return [];
+  return (state.data.activities || [])
+    .filter((a) => gearSlugsOf(a).includes(slug))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+/** 计算同一天同路线下的下一个 sequence：自动让多条活动并存。 */
+function nextActivitySequence(date, route) {
+  const same = (state.data.activities || []).filter(
+    (a) => String(a.date) === String(date) && String(a.route) === String(route)
+  );
+  const maxSeq = same.reduce((m, a) => Math.max(m, Number(a.sequence) || 0), -1);
+  return maxSeq + 1;
+}
+function toast(msg, type = 'info') {
+  const t = el('div', { class: `toast toast-${type}` }, msg);
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 250);
+  }, 3000);
+}
+
+/** 把 export 返回的 DB 行 {slug/date, data, raw_markdown} 解包成扁平结构，对齐脚本侧 _unwrap。 */
+function unwrap(row) {
+  if (!row || typeof row !== 'object') return row;
+  if (!('data' in row)) return row;
+  let inner = row.data;
+  while (inner && typeof inner === 'object' && inner.data && typeof inner.data === 'object') {
+    inner = inner.data;
+  }
+  if (!inner || typeof inner !== 'object') return row;
+  const flat = { ...inner };
+  if ('slug' in row) flat.slug = row.slug;
+  if ('date' in row) flat.date = row.date;
+  if ('route' in row && flat.route == null) flat.route = row.route;
+  if ('name' in row && flat.name == null) flat.name = row.name;
+  if ('plan_type' in row) flat.plan_type = row.plan_type;
+  if ('id' in row) flat.id = row.id;
+  if ('sequence' in row) flat.sequence = row.sequence;
+  // 保留原始 Markdown（脚本侧 _unwrap 同名约定）：写回时需回传，且要在其中同步 frontmatter 的 gear_used 块。
+  if ('raw_markdown' in row) flat._raw_markdown = row.raw_markdown;
+  return flat;
+}
+
+function unwrapList(rows) {
+  return Array.isArray(rows) ? rows.map(unwrap) : [];
+}
+
+function num(v, digits = 1) {
+  if (v == null || v === '' || isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(digits);
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  return String(d).slice(0, 10);
+}
+
+/** 把可能包含空对象的字符串数组格式化为「、」分隔的可读文本。 */
+function fmtStringList(arr) {
+  if (!Array.isArray(arr)) return arr;
+  const filtered = arr.map((x) => (x && typeof x === 'object' ? '' : String(x))).filter((s) => s && s !== '[object Object]');
+  return filtered.length ? filtered.join('、') : null;
+}
+
+/** 把小时数格式化为 HH:MM:SS，用于跑步等需要精确到秒的场景。 */
+function fmtDuration(hours) {
+  if (hours == null || isNaN(Number(hours))) return '—';
+  const totalSec = Math.round(Number(hours) * 3600);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${m}:${pad(s)}`;
+}
+
+/** 计算配速（分钟/公里）。 */
+function paceMinPerKm(distanceKm, hours) {
+  const d = Number(distanceKm);
+  const t = Number(hours);
+  if (!d || !t || d <= 0 || t <= 0) return null;
+  const minPerKm = (t * 60) / d;
+  const m = Math.floor(minPerKm);
+  const s = Math.round((minPerKm - m) * 60);
+  return `${m}:${String(s).padStart(2, '0')}/km`;
+}
+
+/** 判断活动是否为跑步。 */
+function isRunning(a) {
+  return /run|跑步|配速/i.test(String(a.type || ''));
+}
