@@ -76,8 +76,9 @@ function parseSpecText(text) {
   return out;
 }
 
-/** 创建并显示一个模态弹窗。返回关闭函数。 */
-function showModal(title, contentNode, buttons = []) {
+/** 创建并显示一个模态弹窗。返回关闭函数。
+ *  @param onClose 可选；弹窗关闭（含点击遮罩/×/非 data-no-autoclose 按钮）后调用。 */
+function showModal(title, contentNode, buttons = [], onClose = null) {
   const overlay = el('div', { class: 'modal-overlay' });
   const box = el('div', { class: 'modal-box' });
   const header = el('div', { class: 'modal-header' },
@@ -94,7 +95,10 @@ function showModal(title, contentNode, buttons = []) {
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
+  const close = () => {
+    overlay.remove();
+    if (typeof onClose === 'function') onClose();
+  };
   const closeBtn = $('.modal-close', overlay);
   if (closeBtn) closeBtn.addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });

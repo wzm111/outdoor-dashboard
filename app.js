@@ -76,6 +76,66 @@ function switchView(name) {
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
 }
+
+// ---------- Service Worker 更新提示 ----------
+
+function initServiceWorkerUpdates(registration) {
+  let promptShown = false;
+  let pendingVersion = null;
+
+  function showUpdatePrompt(version) {
+    if (promptShown) return;
+    promptShown = true;
+
+    const versionLabel = version ? `（${version}）` : '';
+    const content = el('p', {}, `检测到新版本${versionLabel}，是否立即刷新？`);
+    const refreshBtn = el(
+      'button',
+      { class: 'btn btn-primary', 'data-no-autoclose': '' },
+      '立即刷新'
+    );
+    const dismissBtn = el('button', { class: 'btn' }, '稍后再说');
+
+    const close = showModal('新版本可用', content, [refreshBtn, dismissBtn], () => {
+      promptShown = false;
+    });
+
+    refreshBtn.addEventListener('click', () => window.location.reload());
+  }
+
+  // 新版 SW 安装完成后会主动通知我们它的版本
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const data = event && event.data;
+    if (!data || data.type !== 'SW_UPDATE_AVAILABLE') return;
+    pendingVersion = data.version || pendingVersion;
+    if (navigator.serviceWorker.controller) {
+      showUpdatePrompt(pendingVersion);
+    }
+  });
+
+  // 浏览器自己发现新版 SW 并进入 installed 状态时的兜底
+  registration.addEventListener('updatefound', () => {
+    const newWorker = registration.installing;
+    if (!newWorker) return;
+    newWorker.addEventListener('statechange', () => {
+      if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+        showUpdatePrompt(pendingVersion);
+      }
+    });
+  });
+
+  // 其他标签页已接受更新，新 SW 接管本页时给出轻量提示
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    console.log('[SW] controllerchange');
+    toast('应用已更新，刷新后使用最新版本', 'info');
+  });
+
+  // 长运行会话：每小时主动检查一次更新
+  setInterval(() => {
+    registration.update().catch((err) => console.warn('[SW] 主动检查更新失败', err));
+  }, 60 * 60 * 1000);
+}
+
 // ---------- 初始化 ----------
 
 function init() {
@@ -140,7 +200,10 @@ function init() {
   // 注册 service worker（PWA），加版本戳避免旧 SW 被 CDN/浏览器缓存钉死
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register(`service-worker.js?v=${window.__APP_VERSION || Date.now()}`).catch(() => {});
+      navigator.serviceWorker
+        .register(`service-worker.js?v=${window.__APP_VERSION || Date.now()}`)
+        .then((reg) => initServiceWorkerUpdates(reg))
+        .catch((err) => console.warn('[SW] 注册失败', err));
     });
   }
 

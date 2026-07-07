@@ -6,7 +6,8 @@
  * - API 请求（/auth/token、/sync）一律走网络，绝不缓存（含密钥/JWT，且数据要新鲜）。
  *   离线时的数据回退由 app.js 用 localStorage 快照处理，不在 SW 层缓存响应。
  */
-const CACHE = 'outdoor-dashboard-v34.3';
+const CACHE = 'outdoor-dashboard-v34.4';
+const SW_VERSION = 'v34.4-2026-07-07';
 // 核心外壳：必须全部缓存成功（addAll 原子操作），缺一不可离线运行
 const SHELL = [
   './',
@@ -40,6 +41,13 @@ const OPTIONAL = [
   './icon-512.png',
 ];
 
+function notifyClients(type, payload = {}) {
+  if (!self.clients) return;
+  self.clients.matchAll({ type: 'window' }).then((clients) => {
+    clients.forEach((client) => client.postMessage({ type, ...payload }));
+  });
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) =>
@@ -48,6 +56,7 @@ self.addEventListener('install', (event) => {
         Promise.all(OPTIONAL.map((u) => cache.add(u).catch(() => {})))
       )
     ).then(() => self.skipWaiting())
+     .then(() => notifyClients('SW_UPDATE_AVAILABLE', { version: SW_VERSION }))
   );
 });
 
