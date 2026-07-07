@@ -14,9 +14,11 @@ function showDashboard() {
 
 async function loadAndRender(isRefresh = false) {
   console.log('🔵 [loadAndRender] 开始 isRefresh=' + isRefresh);
-  const loading = $('#loading');
-  loading.hidden = false;
+  // 数据拉取阶段用 app 内骨架屏替代全局 spinner，提前露出顶栏/导航，感知更快。
+  $('#loading').hidden = true;
+  $('#app').hidden = false;
   $('#sync-status').textContent = '';
+  showSkeletons();
 
   const cached = (() => { try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch { return null; } })();
   const meta = loadSyncMeta();
@@ -51,11 +53,13 @@ async function loadAndRender(isRefresh = false) {
 
     await saveSnapshot();
     saveSyncMeta({ lastSyncAt: raw.server_now || new Date().toISOString() });
+    hideSkeletons();
     renderAll();
     showDashboard();
     $('#sync-status').textContent = isDelta ? '✓ 已增量同步' : '✓ 已同步';
   } catch (err) {
     console.log('🔴 [loadAndRender] 失败: ' + (err && err.message ? err.message : err));
+    hideSkeletons();
     // 失败时尝试用缓存快照（离线/PWA）
     if (cached) {
       state.data = cached;
@@ -68,7 +72,7 @@ async function loadAndRender(isRefresh = false) {
       $('#sync-status').textContent = '刷新失败';
     }
   } finally {
-    loading.hidden = true;
+    hideSkeletons(); // 确保任何情况下骨架屏都被清理
   }
 }
 

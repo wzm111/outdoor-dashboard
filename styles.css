@@ -916,6 +916,67 @@ textarea { resize: vertical; }
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
+.skeleton-screen { animation: fade 0.2s ease; }
+.skeleton-text { height: 1em; border-radius: 4px; margin-bottom: 0.6em; }
+.skeleton-text:last-child { margin-bottom: 0; }
+.skeleton-text-sm { height: 0.8em; }
+.skeleton-text-lg { height: 1.4em; }
+.skeleton-title { height: 1.1em; width: 35%; max-width: 180px; margin: 24px 0 12px; }
+.skeleton-title:first-child { margin-top: 0; }
+.skeleton-circle { border-radius: 50%; flex-shrink: 0; }
+.skeleton-card { border-radius: var(--radius); }
+.skeleton-row { height: 40px; border-radius: var(--radius-sm); margin-bottom: 8px; }
+.skeleton-row:last-child { margin-bottom: 0; }
+.skeleton-table-row { height: 36px; border-radius: 4px; margin-bottom: 6px; }
+.skeleton-table-row:last-child { margin-bottom: 0; }
+.skeleton-grid { display: grid; gap: 14px; }
+.skeleton-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
+.skeleton-header-title { height: 1.1em; width: 120px; }
+.skeleton-header-actions { display: flex; gap: 8px; }
+.skeleton-btn { width: 72px; height: 30px; border-radius: var(--radius-sm); }
+.skeleton-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 14px; }
+.skeleton-tab { width: 64px; height: 34px; border-radius: var(--radius-sm); }
+.skeleton-stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
+.skeleton-stat-card .skeleton-text { width: 50%; margin-bottom: 14px; }
+.skeleton-stat-card .skeleton-text-lg { width: 60%; margin-bottom: 0; }
+.skeleton-profile-header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.skeleton-avatar { width: 54px; height: 54px; }
+.skeleton-w-55 { width: 55%; }
+.skeleton-w-45 { width: 45%; }
+.skeleton-w-60 { width: 60%; }
+.skeleton-w-140 { width: 140px; }
+.skeleton-mt-0 { margin-top: 0 !important; }
+.skeleton-report-card .skeleton-report-grid.skeleton-mt-0 { margin-top: 0; }
+.skeleton-profile-title { flex: 1; min-width: 0; }
+.skeleton-profile-title .skeleton-text { width: 40%; margin-bottom: 10px; }
+.skeleton-profile-title .skeleton-text-sm { width: 30%; margin-bottom: 0; }
+.skeleton-profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+.skeleton-profile-metric { background: var(--bg-elev); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px; }
+.skeleton-profile-metric .skeleton-text { width: 55%; margin-bottom: 10px; }
+.skeleton-profile-metric .skeleton-text-lg { width: 45%; margin-bottom: 0; }
+.skeleton-gear-group { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; box-shadow: var(--shadow); }
+.skeleton-gear-group-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: var(--bg-elev); }
+.skeleton-gear-group-header .skeleton-text { width: 100px; margin: 0; }
+.skeleton-gear-group-header .skeleton-text-sm { width: 48px; margin: 0; }
+.skeleton-gear-group-body { padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.skeleton-gear-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; min-height: 96px; }
+.skeleton-gear-card .skeleton-text { width: 70%; margin-bottom: 10px; }
+.skeleton-gear-card .skeleton-text-sm { width: 50%; margin-bottom: 14px; }
+.skeleton-gear-card .skeleton-text:last-child { width: 90%; margin-bottom: 0; }
+.skeleton-chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+.skeleton-chart-card .skeleton-text { width: 35%; margin-bottom: 18px; }
+.skeleton-chart { height: 160px; border-radius: var(--radius-sm); margin-bottom: 10px; }
+.skeleton-plan-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow); }
+.skeleton-plan-card .skeleton-header { margin-bottom: 12px; }
+.skeleton-plan-card .skeleton-header-title { width: 55%; }
+.skeleton-plan-card .skeleton-badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.skeleton-badge { width: 72px; height: 24px; border-radius: 999px; }
+.skeleton-report-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 16px; margin-top: 14px; }
+.skeleton-report-card .skeleton-text { width: 30%; margin-bottom: 16px; }
+.skeleton-report-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+@media (max-width: 900px) { .skeleton-report-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .skeleton-report-grid { grid-template-columns: 1fr; } }
+
 /* ---------- 离线状态条（B2） ---------- */
 .offline-banner {
   position: fixed;

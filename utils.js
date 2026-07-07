@@ -174,6 +174,16 @@ function toast(msg, type = 'info') {
   }, 3000);
 }
 
+/** 显示所有视图内的骨架屏（数据加载阶段替代 spinner）。 */
+function showSkeletons() {
+  $$('.view .skeleton-screen').forEach((s) => { s.hidden = false; });
+}
+
+/** 隐藏所有骨架屏。 */
+function hideSkeletons() {
+  $$('.view .skeleton-screen').forEach((s) => { s.hidden = true; });
+}
+
 /** 把 export 返回的 DB 行 {slug/date, data, raw_markdown} 解包成扁平结构，对齐脚本侧 _unwrap。 */
 function unwrap(row) {
   if (!row || typeof row !== 'object') return row;

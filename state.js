@@ -105,8 +105,9 @@ async function connect(apiUrl, secret, remember) {
     // UI 切换已收进 loadAndRender 的 showDashboard()，此处无需重复
   } catch (err) {
     console.log('🔴 [connect] 失败: ' + (err && err.message ? err.message : err));
-    // 失败必须复位到干净的登录态：关掉 spinner、露出登录框、显示错误。
-    // 否则会出现"spinner 卡着 / 登录框和加载浮层同时盖着"的观感。
+    // 失败必须复位到干净的登录态：关掉 spinner/骨架屏、露出登录框、显示错误。
+    // 否则会出现"spinner 卡着 / 骨架屏残留 / 登录框和加载浮层同时盖着"的观感。
+    hideSkeletons();
     $('#loading').hidden = true;
     $('#app').hidden = true;
     $('#auth-screen').hidden = false;
