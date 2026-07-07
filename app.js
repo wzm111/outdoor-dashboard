@@ -50,6 +50,28 @@ async function loadAndRender(isRefresh = false) {
 
     if (isDelta) {
       state.data = applySyncDelta(cached || state.data, raw);
+      // 兜底：若增量后仍有实体类型为空（且服务端也没给这部分数据），很可能是历史损坏缓存。
+      // 自动再跑一次全量同步补全，避免用户必须手动点「清除缓存」。
+      const stillMissing = ['gear', 'routes', 'segments'].filter((k) => {
+        const cachedEmpty = !cached || !Array.isArray(cached[k]) || cached[k].length === 0;
+        const deltaEmpty = !Array.isArray(raw[k]) || raw[k].length === 0;
+        const deletedEmpty = !raw.deleted || !Array.isArray(raw.deleted[k]) || raw.deleted[k].length === 0;
+        return cachedEmpty && deltaEmpty && deletedEmpty;
+      });
+      if (stillMissing.length > 0 && !isRefresh) {
+        console.log('🟡 [loadAndRender] 增量后 ' + stillMissing.join('/') + ' 仍为空，自动回退全量同步');
+        raw = await fetchExport(state.apiUrl, state.token);
+        isDelta = false;
+        state.data = {
+          profile: unwrap(raw.profile),
+          gear: unwrapList(raw.gear),
+          routes: unwrapList(raw.routes),
+          activities: unwrapList(raw.activities),
+          body_logs: unwrapList(raw.body_logs),
+          plans: unwrapList(raw.plans),
+          segments: unwrapList(raw.segments),
+        };
+      }
     } else {
       state.data = {
         profile: unwrap(raw.profile),
