@@ -390,7 +390,7 @@ function routeDetailActivities(r, acts) {
         el('div', { class: 'elevation-stat-value' }, value,
           unit ? el('span', { class: 'elevation-stat-unit' }, unit) : ''),
         el('div', { class: 'elevation-stat-label' }, label));
-    statRow.appendChild(stat('次数', stats.count));
+    statRow.appendChild(stat('次数', num(stats.count, 0)));
     statRow.appendChild(stat('平均距离', stats.avgDistance != null ? num(stats.avgDistance, 1) : '—', 'km'));
     statRow.appendChild(stat('平均时长', stats.avgTime != null ? num(stats.avgTime, 1) : '—', 'h'));
     statRow.appendChild(stat('最快用时', stats.bestTime != null ? fmtDuration(stats.bestTime) : '—'));

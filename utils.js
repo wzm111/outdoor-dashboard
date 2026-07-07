@@ -15,7 +15,9 @@ function el(tag, attrs = {}, ...children) {
   }
   for (const c of children.flat()) {
     if (c == null) continue;
-    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    node.appendChild(typeof c === 'string' || typeof c === 'number'
+      ? document.createTextNode(c)
+      : c);
   }
   return node;
 }
