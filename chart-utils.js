@@ -168,3 +168,171 @@ function drawDonut(canvas, slices) {
     start = end;
   }
 }
+
+// ---------- 海拔剖面图 ----------
+
+function elevationProfileCard(title, points, opts = {}) {
+  const card = el('div', { class: 'report-card elevation-profile-card' });
+  card.appendChild(el('h3', {}, title));
+  if (!points || !points.length) {
+    card.appendChild(el('div', { class: 'empty' }, '无轨迹数据'));
+    return card;
+  }
+
+  const canvasWrap = el('div', { class: 'elevation-profile-wrap' });
+  const canvas = el('canvas', { class: 'elevation-profile-canvas' });
+  canvasWrap.appendChild(canvas);
+  card.appendChild(canvasWrap);
+
+  const stats = opts.stats || (() => {
+    // chart-utils 不依赖 gpx-utils，兜底内联计算
+    let gainM = 0, lossM = 0;
+    let minEleM = points[0].ele, maxEleM = points[0].ele;
+    for (let i = 1; i < points.length; i++) {
+      const diff = points[i].ele - points[i - 1].ele;
+      if (diff > 0) gainM += diff;
+      else lossM += Math.abs(diff);
+      minEleM = Math.min(minEleM, points[i].ele);
+      maxEleM = Math.max(maxEleM, points[i].ele);
+    }
+    return {
+      distanceKm: points[points.length - 1].distanceKm || 0,
+      gainM: Math.round(gainM),
+      lossM: Math.round(lossM),
+      minEleM: Math.round(minEleM),
+      maxEleM: Math.round(maxEleM),
+    };
+  })();
+  const statRow = el('div', { class: 'elevation-stat-row' });
+  const stat = (label, value, unit) =>
+    el('div', { class: 'elevation-stat' },
+      el('div', { class: 'elevation-stat-value' }, value, unit ? el('span', { class: 'elevation-stat-unit' }, unit) : ''),
+      el('div', { class: 'elevation-stat-label' }, label));
+  statRow.appendChild(stat('距离', num(stats.distanceKm, 1), 'km'));
+  statRow.appendChild(stat('爬升', num(stats.gainM, 0), 'm'));
+  statRow.appendChild(stat('下降', num(stats.lossM, 0), 'm'));
+  statRow.appendChild(stat('最高', num(stats.maxEleM, 0), 'm'));
+  statRow.appendChild(stat('最低', num(stats.minEleM, 0), 'm'));
+  card.appendChild(statRow);
+
+  requestAnimationFrame(() => drawElevationProfile(canvas, points, opts));
+  return card;
+}
+
+function drawElevationProfile(canvas, points, opts = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 600;
+  const cssH = opts.height || 220;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  if (!points || points.length < 2) return;
+
+  const padL = 46, padR = 16, padT = 24, padB = 28;
+  const w = cssW - padL - padR;
+  const h = cssH - padT - padB;
+
+  const distances = points.map((p) => p.distanceKm || 0);
+  const elevations = points.map((p) => p.ele || 0);
+  const maxD = Math.max(...distances);
+  let minE = Math.min(...elevations);
+  let maxE = Math.max(...elevations);
+  if (minE === maxE) { minE -= 10; maxE += 10; }
+  const pad = (maxE - minE) * 0.05;
+  minE -= pad;
+  maxE += pad;
+
+  const x = (d) => padL + (maxD ? (d / maxD) * w : 0);
+  const y = (e) => padT + h - ((e - minE) / (maxE - minE)) * h;
+
+  const css = getComputedStyle(document.body);
+  const gridColor = css.getPropertyValue('--border').trim() || '#2a3340';
+  const dimColor = css.getPropertyValue('--text-dim').trim() || '#9aa7b4';
+  const lineColor = css.getPropertyValue('--accent').trim() || '#4ade80';
+
+  // 网格 + 刻度
+  ctx.strokeStyle = gridColor;
+  ctx.fillStyle = dimColor;
+  ctx.font = '11px sans-serif';
+  ctx.lineWidth = 1;
+  const yTicks = 4;
+  for (let i = 0; i <= yTicks; i++) {
+    const ev = minE + ((maxE - minE) * i) / yTicks;
+    const py = y(ev);
+    ctx.beginPath();
+    ctx.moveTo(padL, py);
+    ctx.lineTo(cssW - padR, py);
+    ctx.stroke();
+    ctx.fillText(Math.round(ev) + 'm', 4, py + 4);
+  }
+  const xTicks = Math.min(6, Math.max(2, Math.floor(maxD)));
+  for (let i = 0; i <= xTicks; i++) {
+    const dv = (maxD / xTicks) * i;
+    const px = x(dv);
+    ctx.beginPath();
+    ctx.moveTo(px, padT);
+    ctx.lineTo(px, padT + h);
+    ctx.stroke();
+    ctx.fillText(dv.toFixed(1) + 'km', px, padT + h + 16);
+  }
+
+  // 填充区域
+  const gradient = ctx.createLinearGradient(0, padT, 0, padT + h);
+  gradient.addColorStop(0, 'rgba(74, 222, 128, 0.35)');
+  gradient.addColorStop(1, 'rgba(74, 222, 128, 0.03)');
+  ctx.beginPath();
+  ctx.moveTo(x(distances[0]), y(elevations[0]));
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(x(distances[i]), y(elevations[i]));
+  }
+  ctx.lineTo(x(distances[distances.length - 1]), padT + h);
+  ctx.lineTo(x(distances[0]), padT + h);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // 海拔线
+  ctx.beginPath();
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.moveTo(x(distances[0]), y(elevations[0]));
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(x(distances[i]), y(elevations[i]));
+  }
+  ctx.stroke();
+
+  // 关键点位标注
+  const annotations = [];
+  const startIdx = 0;
+  const endIdx = points.length - 1;
+  let maxIdx = 0, minIdx = 0;
+  for (let i = 1; i < elevations.length; i++) {
+    if (elevations[i] > elevations[maxIdx]) maxIdx = i;
+    if (elevations[i] < elevations[minIdx]) minIdx = i;
+  }
+
+  annotations.push({ idx: startIdx, text: `起点 ${Math.round(elevations[startIdx])}m`, color: '#4ade80', anchor: 'start' });
+  annotations.push({ idx: endIdx, text: `终点 ${Math.round(elevations[endIdx])}m`, color: '#f87171', anchor: 'end' });
+  annotations.push({ idx: maxIdx, text: `▲ 最高 ${Math.round(elevations[maxIdx])}m`, color: '#fbbf24', anchor: 'middle' });
+  if (minIdx !== startIdx && minIdx !== endIdx) {
+    annotations.push({ idx: minIdx, text: `▼ 最低 ${Math.round(elevations[minIdx])}m`, color: '#60a5fa', anchor: 'middle' });
+  }
+
+  ctx.font = 'bold 11px sans-serif';
+  for (const ann of annotations) {
+    const px = x(distances[ann.idx]);
+    const py = y(elevations[ann.idx]) - 10;
+    ctx.fillStyle = ann.color;
+    ctx.textAlign = ann.anchor;
+    ctx.fillText(ann.text, px, py);
+    // 点
+    ctx.beginPath();
+    ctx.arc(px, y(elevations[ann.idx]), 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.textAlign = 'start';
+}
