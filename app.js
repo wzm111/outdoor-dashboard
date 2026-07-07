@@ -73,6 +73,7 @@ function viewEl(name) { return $(`.view[data-view="${name}"]`); }
 
 const DEFAULT_VIEW = 'overview';
 const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports'];
+const MORE_VIEWS = ['routes', 'plans', 'reports'];
 
 /** 从 URL hash 解析当前视图，非法或空时回退到总览。 */
 function viewFromHash() {
@@ -84,7 +85,24 @@ function viewFromHash() {
 
 function switchView(name, { updateHash = true } = {}) {
   const target = VALID_VIEWS.includes(name) ? name : DEFAULT_VIEW;
+
+  // 顶部 tab（桌面端）
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === target));
+
+  // 底部 tab（移动端）
+  $$('.bottom-tab').forEach((t) => {
+    t.classList.toggle('active', t.dataset.view === target);
+  });
+  $$('.bottom-tab-more').forEach((t) => {
+    t.classList.toggle('active', MORE_VIEWS.includes(target));
+  });
+
+  // 「更多」菜单项
+  $$('.bottom-more-item').forEach((t) => {
+    t.classList.toggle('active', t.dataset.view === target);
+  });
+
+  // 视图显隐
   $$('.view').forEach((v) => { v.hidden = v.dataset.view !== target; });
   if (updateHash) {
     const newHash = target === DEFAULT_VIEW ? '' : `#${target}`;
@@ -93,6 +111,27 @@ function switchView(name, { updateHash = true } = {}) {
       history.replaceState(null, '', newHash || window.location.pathname + window.location.search);
     }
   }
+}
+
+// ---------- 移动端底部导航「更多」菜单 ----------
+
+function toggleBottomMore() {
+  const menu = $('#bottom-more-menu');
+  const btn = $('#bottom-tab-more');
+  if (!menu || !btn) return;
+  const willOpen = !menu.classList.contains('open');
+  menu.classList.toggle('open', willOpen);
+  menu.hidden = !willOpen;
+  btn.setAttribute('aria-expanded', String(willOpen));
+}
+
+function closeBottomMore() {
+  const menu = $('#bottom-more-menu');
+  const btn = $('#bottom-tab-more');
+  if (!menu) return;
+  menu.classList.remove('open');
+  menu.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
 // ---------- Service Worker 更新提示 ----------
@@ -179,9 +218,46 @@ function init() {
     if (btn) switchView(btn.dataset.view);
   });
 
+  // 底部 tab（移动端）
+  const bottomNav = $('#bottom-nav');
+  if (bottomNav) {
+    bottomNav.addEventListener('click', (e) => {
+      const btn = e.target.closest('.bottom-tab');
+      if (!btn) return;
+      if (btn.id === 'bottom-tab-more') {
+        toggleBottomMore();
+        return;
+      }
+      closeBottomMore();
+      switchView(btn.dataset.view);
+    });
+  }
+
+  // 「更多」菜单项
+  const bottomMoreMenu = $('#bottom-more-menu');
+  if (bottomMoreMenu) {
+    bottomMoreMenu.addEventListener('click', (e) => {
+      const btn = e.target.closest('.bottom-more-item');
+      if (!btn) return;
+      closeBottomMore();
+      switchView(btn.dataset.view);
+    });
+  }
+
+  // 点击外部或按 Esc 关闭「更多」菜单
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#bottom-nav') && !e.target.closest('#bottom-more-menu')) {
+      closeBottomMore();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeBottomMore();
+  });
+
   // 浏览器前进/后退时根据 hash 切换视图
   window.addEventListener('hashchange', () => {
     switchView(viewFromHash(), { updateHash: false });
+    closeBottomMore();
   });
 
   $('#refresh-btn').addEventListener('click', () => loadAndRender(true));
