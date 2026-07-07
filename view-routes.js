@@ -17,6 +17,7 @@ function buildRouteMarkdown(data) {
   if (Array.isArray(data.terrain) && data.terrain.length) { lines.push('terrain:'); for (const s of data.terrain) lines.push(`  - ${s}`); }
   if (Array.isArray(data.best_seasons) && data.best_seasons.length) { lines.push('best_seasons:'); for (const s of data.best_seasons) lines.push(`  - ${s}`); }
   if (Array.isArray(data.water_sources) && data.water_sources.length) { lines.push('water_sources:'); for (const s of data.water_sources) lines.push(`  - ${s}`); }
+  if (data.gpx_file) lines.push(`gpx_file: "${data.gpx_file}"`);
   if (data.source_url) lines.push(`source_url: "${data.source_url}"`);
   if (data.notes) lines.push(`notes: "${data.notes}"`);
   lines.push('---');
@@ -261,12 +262,30 @@ function openRouteDetail(r) {
 
   // GPX 海拔剖面
   const gpxSection = el('div', { class: 'route-detail-section' });
-  gpxSection.appendChild(el('div', { class: 'section-title' }, 'GPX 海拔剖面'));
+  gpxSection.appendChild(el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+    el('span', {}, 'GPX 海拔剖面'),
+    state.token ? el('label', { class: 'btn-sm', style: 'cursor:pointer;margin:0;', for: `route-gpx-upload-${r.slug}` }, '📎 上传/替换 GPX') : ''
+  ));
   const gpxPanel = el('div', { class: 'route-detail-gpx-panel' },
     el('div', { class: 'skeleton skeleton-route-chart' }));
   gpxSection.appendChild(gpxPanel);
   wrap.appendChild(gpxSection);
   routeDetailGpxPanel(r, gpxPanel);
+
+  // 隐藏的 GPX 文件输入
+  if (state.token) {
+    const fileInput = el('input', {
+      type: 'file',
+      id: `route-gpx-upload-${r.slug}`,
+      accept: '.gpx,application/gpx+xml',
+      style: 'display:none;',
+    });
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) handleRouteGpxUpload(r, file);
+    });
+    wrap.appendChild(fileInput);
+  }
 
   // 历史活动
   const acts = routeRelatedActivities(r);
@@ -512,6 +531,61 @@ async function routeDetailGpxPanel(r, container) {
   } catch (err) {
     container.innerHTML = '';
     container.appendChild(el('div', { class: 'empty' }, `GPX 解析失败：${err.message || '未知错误'}`));
+  }
+}
+
+/** 处理用户从本地选择的 GPX 文件：解析、可选更新路线统计、Base64 保存到路线并回写。 */
+async function handleRouteGpxUpload(route, file) {
+  if (!state.token) { toast('请先连接后再上传 GPX', 'warn'); return; }
+  const text = await file.text();
+  let points;
+  try {
+    points = parseGpxXml(text);
+  } catch (err) {
+    toast(`GPX 解析失败：${err.message || '未知错误'}`, 'error');
+    return;
+  }
+  if (!points.length) {
+    toast('GPX 文件中未找到轨迹点', 'warn');
+    return;
+  }
+  const stats = computeGpxStats(points);
+
+  const doSave = confirm(
+    `解析成功：${points.length} 个轨迹点，距离 ${num(stats.distanceKm, 1)} km，爬升 ${stats.gainM} m。\n\n` +
+    `是否同时把路线统计更新为 GPX 计算值？\n（距离/爬升/下降/最高海拔会被覆盖）\n\n` +
+    `点击「确定」更新统计并保存 GPX；点击「取消」只保存 GPX 不覆盖统计。`
+  );
+
+  const updated = { ...route };
+  if (doSave) {
+    updated.distance_km = Number(stats.distanceKm.toFixed(1));
+    updated.elevation_gain_m = stats.gainM;
+    updated.elevation_loss_m = stats.lossM;
+    updated.max_altitude_m = stats.maxEleM;
+  }
+  // GPX 文件内嵌为 base64 data URL；体积过大时只保留引用提示
+  const base64 = btoa(unescape(encodeURIComponent(text)));
+  const dataUrl = `data:application/gpx+xml;base64,${base64}`;
+  if (dataUrl.length > 1024 * 1024) {
+    toast('GPX 文件过大（>1MB），建议先上传到外部图床/网盘再粘贴 URL', 'warn');
+    return;
+  }
+  updated.gpx_file = dataUrl;
+
+  const slug = route.slug || route.name;
+  try {
+    await fetchSaveRoute(state.apiUrl, state.token, slug, {
+      data: packRoutePayload(updated).data,
+      raw_markdown: buildRouteMarkdown(updated),
+    });
+    toast('GPX 已保存到路线', 'success');
+    await loadAndRender(true);
+    // 重新打开详情弹窗
+    const refreshed = state.data.routes.find((r) => (r.slug || r.name) === slug);
+    if (refreshed) openRouteDetail(refreshed);
+  } catch (err) {
+    toast(err.message || '保存 GPX 失败', 'error');
   }
 }
 

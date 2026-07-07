@@ -1783,6 +1783,13 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
   border-radius: var(--radius-sm);
 }
 
+.route-detail-gpx-panel .empty {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 640px) {
   .modal-overlay {
     padding: 0;
