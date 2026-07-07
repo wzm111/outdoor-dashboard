@@ -89,3 +89,82 @@ function drawLine(canvas, points, color, forceMin, forceMax) {
     ctx.fillText(lastLabel, cssW - padR - tw, cssH - 8);
   }
 }
+
+// ---------- 环形图 ----------
+
+function donutChartCard(title, slices) {
+  const card = el('div', { class: 'report-card' });
+  card.appendChild(el('h3', {}, title));
+  const chart = donutChart(slices);
+  if (!chart) {
+    card.appendChild(el('div', { class: 'empty' }, '无数据'));
+    return card;
+  }
+  card.appendChild(chart);
+  return card;
+}
+
+function donutChart(slices) {
+  const total = slices.reduce((s, x) => s + (Number(x.value) || 0), 0);
+  if (!total) return null;
+
+  const wrapper = el('div', { class: 'donut-chart-wrapper' });
+
+  const chartWrap = el('div', { class: 'donut-chart' });
+  const canvas = el('canvas');
+  chartWrap.appendChild(canvas);
+  chartWrap.appendChild(
+    el('div', { class: 'donut-center' },
+      el('div', { class: 'donut-center-value' }, (total / 1000).toFixed(2) + ' kg'),
+      el('div', { class: 'donut-center-label' }, '总重量')
+    )
+  );
+  wrapper.appendChild(chartWrap);
+
+  const legend = el('div', { class: 'donut-legend' });
+  for (const s of slices) {
+    legend.appendChild(
+      el('div', { class: 'donut-legend-item' },
+        el('span', { class: 'donut-legend-label' },
+          el('span', { class: 'donut-legend-swatch', style: `background:${s.color}` }),
+          s.label
+        ),
+        el('span', { class: 'donut-legend-value' }, `${(s.value / 1000).toFixed(2)} kg (${total ? Math.round((s.value / total) * 100) : 0}%)`)
+      )
+    );
+  }
+  wrapper.appendChild(legend);
+
+  requestAnimationFrame(() => drawDonut(canvas, slices));
+  return wrapper;
+}
+
+function drawDonut(canvas, slices) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 160;
+  const cssH = canvas.clientHeight || 160;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const total = slices.reduce((s, x) => s + (Number(x.value) || 0), 0);
+  if (!total) return;
+
+  const cx = cssW / 2;
+  const cy = cssH / 2;
+  const radius = Math.min(cx, cy) - 8;
+  const thickness = 22;
+
+  let start = -Math.PI / 2;
+  for (const s of slices) {
+    const frac = s.value / total;
+    const end = start + frac * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, start, end);
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = thickness;
+    ctx.stroke();
+    start = end;
+  }
+}

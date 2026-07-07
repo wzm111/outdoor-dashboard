@@ -1315,6 +1315,300 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 .segment-table td { color: var(--text); }
 .segment-table tr:last-child td { border-bottom: none; }
 
+/* ---------- 报告中心扩展（v1.1.0） ---------- */
+
+/* 环比变化 */
+.stat-card .change {
+  font-size: 12px;
+  margin-top: 6px;
+  font-weight: 500;
+}
+.change-up { color: #86efac; }
+.change-down { color: #fca5a5; }
+.change-same { color: var(--text-dim); }
+
+/* 周期摘要 */
+.period-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.period-label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.period-dates {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.type-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.type-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  color: var(--text);
+}
+.type-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.top-routes {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.top-routes strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* 环形图 */
+.donut-chart-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.donut-chart {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+.donut-chart canvas {
+  width: 100%;
+  height: 100%;
+}
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.donut-center-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.donut-center-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 140px;
+}
+.donut-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.donut-legend-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.donut-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.donut-legend-value {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 装备重量分类 */
+.gear-weight-report {
+  display: grid;
+  gap: 16px;
+}
+.gear-weight-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.gear-weight-category {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.gear-weight-category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.gear-weight-category-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.gear-weight-category-pct {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.gear-weight-category-kg {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.gear-weight-top-list {
+  margin-top: 12px;
+}
+.gear-weight-top-list h4 {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+.gear-weight-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text);
+}
+.gear-weight-item:last-child { border-bottom: none; }
+.gear-weight-advice {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.gear-weight-advice ul { margin: 6px 0 0; padding-left: 18px; }
+.gear-weight-advice li { margin: 3px 0; }
+
+/* 体能评估 */
+.fitness-score-card {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.fitness-score-ring {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
+}
+.fitness-score-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.fitness-score-track {
+  fill: none;
+  stroke: var(--bg-elev);
+  stroke-width: 10;
+}
+.fitness-score-fill {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+.fitness-score-number {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.fitness-score-value {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+}
+.fitness-score-level {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.fitness-dimensions {
+  flex: 1;
+  min-width: 220px;
+}
+.fitness-dimension-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.fitness-dimension-row:last-child { margin-bottom: 0; }
+.fitness-dimension-label {
+  width: 70px;
+  font-size: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.fitness-dimension-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-elev);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fitness-dimension-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.fitness-dimension-score {
+  width: 36px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.fitness-advice {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.fitness-advice ul { margin: 6px 0 0; padding-left: 18px; }
+.fitness-advice li { margin: 3px 0; }
+
+@media (max-width: 520px) {
+  .gear-weight-summary { grid-template-columns: 1fr; }
+  .fitness-score-card { flex-direction: column; align-items: flex-start; }
+  .fitness-dimensions { width: 100%; }
+}
+
 /* ---------- 移动端底部导航 ---------- */
 .bottom-nav,
 .bottom-more-menu { display: none; }
