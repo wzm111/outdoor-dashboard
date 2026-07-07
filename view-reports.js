@@ -5,7 +5,7 @@
 
 function renderReports() {
   const view = viewEl('reports');
-  view.innerHTML = '';
+  clearViewKeepSkeleton(view);
 
   const header = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, '报告中心'),

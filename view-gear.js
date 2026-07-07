@@ -331,7 +331,7 @@ function openAddGear() {
 function renderGear() {
   const allGear = state.data.gear;
   const view = viewEl('gear');
-  view.innerHTML = '';
+  clearViewKeepSkeleton(view);
 
   // 顶部标题 + 添加按钮
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },

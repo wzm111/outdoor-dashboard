@@ -122,7 +122,7 @@ function openAddPlan(plan = null) {
 function renderPlans() {
   const plans = [...state.data.plans].sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const view = viewEl('plans');
-  view.innerHTML = '';
+  clearViewKeepSkeleton(view);
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, `计划（${plans.length}）`),
     el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-plan' }, '添加计划')

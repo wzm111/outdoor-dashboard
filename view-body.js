@@ -169,7 +169,7 @@ function renderBody() {
     .filter((b) => b.date)
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const view = viewEl('body');
-  view.innerHTML = '';
+  clearViewKeepSkeleton(view);
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, `身体趋势（${logs.length} 条记录）`),
     el('div', { style: 'display:flex;gap:8px;' },

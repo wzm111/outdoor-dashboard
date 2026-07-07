@@ -184,6 +184,14 @@ function hideSkeletons() {
   $$('.view .skeleton-screen').forEach((s) => { s.hidden = true; });
 }
 
+/** 清空 view 内容但保留预置的骨架屏容器，避免 renderXxx 把 .skeleton-screen 一起删掉。 */
+function clearViewKeepSkeleton(view) {
+  if (!view) return;
+  const skeleton = $('.skeleton-screen', view);
+  view.innerHTML = '';
+  if (skeleton) view.appendChild(skeleton);
+}
+
 /** 把 export 返回的 DB 行 {slug/date, data, raw_markdown} 解包成扁平结构，对齐脚本侧 _unwrap。 */
 function unwrap(row) {
   if (!row || typeof row !== 'object') return row;

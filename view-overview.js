@@ -138,7 +138,7 @@ function renderOverview() {
   const bodyAgeResult = computeBodyAge(profile, acts, d.body_logs || []);
 
   const view = viewEl('overview');
-  view.innerHTML = '';
+  clearViewKeepSkeleton(view);
 
   const statGrid = el('div', { class: 'stat-grid' });
   statGrid.appendChild(statCard('总活动', acts.length, '次'));

@@ -426,7 +426,7 @@ function renderActivities() {
     return (a.sequence || 0) - (b.sequence || 0);
   });
   const view = viewEl('activities');
-  view.innerHTML = '';
+  clearViewKeepSkeleton(view);
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, `活动（${acts.length}）`),
     el('div', {},

@@ -126,7 +126,7 @@ function renderRoutes() {
   const routes = [...state.data.routes].sort((a, b) =>
     (Number(b.distance_km) || 0) - (Number(a.distance_km) || 0));
   const view = viewEl('routes');
-  view.innerHTML = '';
+  clearViewKeepSkeleton(view);
   // 顶部标题 + AI 添加 + 推荐装备按钮（空列表时按钮也保留）
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, `路线库（${routes.length}）`),
