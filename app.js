@@ -22,7 +22,18 @@ async function loadAndRender(isRefresh = false) {
 
   const cached = (() => { try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch { return null; } })();
   const meta = loadSyncMeta();
-  const canIncremental = !!cached && !!meta && !!meta.lastSyncAt && meta.schemaVersion === window.__APP_VERSION;
+  // 仅当缓存里确实有过数据时才走增量；空缓存（或只有空数组）必须全量，
+  // 否则一旦 meta.lastSyncAt 晚于数据库记录更新时间，增量会返回空并永远覆盖为空。
+  const hasCachedData = cached && (
+    (Array.isArray(cached.gear) && cached.gear.length > 0) ||
+    (Array.isArray(cached.routes) && cached.routes.length > 0) ||
+    (Array.isArray(cached.activities) && cached.activities.length > 0) ||
+    (Array.isArray(cached.body_logs) && cached.body_logs.length > 0) ||
+    (Array.isArray(cached.plans) && cached.plans.length > 0) ||
+    (Array.isArray(cached.segments) && cached.segments.length > 0) ||
+    cached.profile != null
+  );
+  const canIncremental = !!hasCachedData && !!meta && !!meta.lastSyncAt && meta.schemaVersion === window.__APP_VERSION;
 
   try {
     let raw;
@@ -135,6 +146,18 @@ function renderAll() {
 }
 
 function viewEl(name) { return $(`.view[data-view="${name}"]`); }
+
+/** 清除本地缓存与同步元数据，并立即重新拉取全量数据。用于修复“增量同步为空”等缓存不一致问题。 */
+async function clearCacheAndReload() {
+  if (!confirm('确定清除本地缓存并重新从云端拉取全量数据吗？\n（不会删除云端数据）')) return;
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(CACHE_KEY + '-meta');
+  } catch { /* ignore */ }
+  state.data = null;
+  await loadAndRender(true);
+  toast('已清除缓存并重新同步', 'success');
+}
 
 const DEFAULT_VIEW = 'overview';
 const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports'];
@@ -337,9 +360,10 @@ function init() {
     $('#loading').hidden = true;
   });
 
-  // 应急备份导出/导入
+  // 应急备份导出/导入 + 清除缓存强制全量同步
   $('#export-backup-btn').addEventListener('click', exportBackup);
   $('#import-backup-btn').addEventListener('click', () => $('#import-backup-input').click());
+  $('#clear-cache-btn').addEventListener('click', clearCacheAndReload);
   $('#import-backup-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) importBackup(file);
