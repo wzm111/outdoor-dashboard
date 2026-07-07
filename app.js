@@ -70,11 +70,29 @@ function renderAll() {
 }
 
 function viewEl(name) { return $(`.view[data-view="${name}"]`); }
+
+const DEFAULT_VIEW = 'overview';
+const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports'];
+
+/** 从 URL hash 解析当前视图，非法或空时回退到总览。 */
+function viewFromHash() {
+  const hash = window.location.hash.replace(/^#/, '').trim();
+  return VALID_VIEWS.includes(hash) ? hash : DEFAULT_VIEW;
+}
+
 // ---------- tab 切换 ----------
 
-function switchView(name) {
-  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
-  $$('.view').forEach((v) => { v.hidden = v.dataset.view !== name; });
+function switchView(name, { updateHash = true } = {}) {
+  const target = VALID_VIEWS.includes(name) ? name : DEFAULT_VIEW;
+  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === target));
+  $$('.view').forEach((v) => { v.hidden = v.dataset.view !== target; });
+  if (updateHash) {
+    const newHash = target === DEFAULT_VIEW ? '' : `#${target}`;
+    // 仅在真正变化时更新 hash，避免把空 hash 写成 '#overview'
+    if (newHash !== window.location.hash) {
+      history.replaceState(null, '', newHash || window.location.pathname + window.location.search);
+    }
+  }
 }
 
 // ---------- Service Worker 更新提示 ----------
@@ -161,6 +179,11 @@ function init() {
     if (btn) switchView(btn.dataset.view);
   });
 
+  // 浏览器前进/后退时根据 hash 切换视图
+  window.addEventListener('hashchange', () => {
+    switchView(viewFromHash(), { updateHash: false });
+  });
+
   $('#refresh-btn').addEventListener('click', () => loadAndRender(true));
 
   $('#logout-btn').addEventListener('click', () => {
@@ -190,6 +213,10 @@ function init() {
   console.log('🔵 [init] DOM就绪 初始三态 → ' + dbgState() +
     ' | 预填 url=' + (preUrl ? '有' : '无') + ' secret=' + (preSecret ? '有(len=' + preSecret.length + ')' : '无') +
     ' | localStorage=' + (loadConfig() ? '有配置' : '空'));
+
+  // 根据 URL hash 预选中对应 tab（刷新后保留当前视图）
+  switchView(viewFromHash(), { updateHash: false });
+
   if (preUrl && preSecret) {
     console.log('🟢 [init] 触发自动连接');
     connect(preUrl, preSecret, $('#remember').checked);
