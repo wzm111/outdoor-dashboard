@@ -9,6 +9,17 @@ function apiBase(url) {
   return b;
 }
 
+/** 从当前 state.data 中读取某条记录的客户端 _updated_at，用于乐观锁冲突检测。 */
+function getExpectedUpdatedAt(entity, keyValue) {
+  if (!state.data || keyValue == null) return undefined;
+  const key = entity === 'plans' || entity === 'activities' ? 'id' : entity === 'body' ? 'date' : 'slug';
+  const arrKey = entity === 'body' ? 'body_logs' : entity;
+  const arr = state.data[arrKey];
+  if (!Array.isArray(arr)) return undefined;
+  const item = arr.find((x) => String(x[key]) === String(keyValue));
+  return item && item._updated_at ? item._updated_at : undefined;
+}
+
 /** 带超时的 fetch：超时主动 abort，避免请求无限 pending 导致页面永久“加载中”。 */
 async function fetchWithTimeout(url, options, timeoutMs, label) {
   const ctrl = new AbortController();
@@ -29,17 +40,21 @@ async function fetchWithTimeout(url, options, timeoutMs, label) {
 /** 通用删除请求。 */
 async function fetchDelete(apiUrl, token, entity, id) {
   const url = `${apiBase(apiUrl)}/${entity}/${encodeURIComponent(id)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt(entity, id);
   const options = {
     method: 'DELETE',
     headers: {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
   };
   return mutateRequest({
     url,
     options,
     label: '删除',
+    expectedUpdatedAt,
     optimistic: () => {
       const key = entity === 'body' ? 'body_logs' : entity;
       const arr = state.data[key];
@@ -88,6 +103,7 @@ async function fetchExport(apiUrl, token, since = null) {
 
 async function fetchSaveGear(apiUrl, token, slug, data) {
   const url = `${apiBase(apiUrl)}/gear/${encodeURIComponent(slug)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('gear', slug);
   const options = {
     method: 'PUT',
     headers: {
@@ -95,12 +111,13 @@ async function fetchSaveGear(apiUrl, token, slug, data) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify({ ...data, expected_updated_at: expectedUpdatedAt }),
   };
   return mutateRequest({
     url,
     options,
     label: '保存装备',
+    expectedUpdatedAt,
     optimistic: () => {
       const merged = { slug, ...data.data };
       const idx = state.data.gear.findIndex((g) => g.slug === slug);
@@ -259,6 +276,7 @@ async function fetchAiActivity(apiUrl, token, text) {
 /** 保存单条身体记录：PUT /body/:date（存在则更新、不存在则插入）。 */
 async function fetchSaveBody(apiUrl, token, date, data, rawMarkdown) {
   const url = `${apiBase(apiUrl)}/body/${encodeURIComponent(date)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('body', date);
   const options = {
     method: 'PUT',
     headers: {
@@ -266,12 +284,13 @@ async function fetchSaveBody(apiUrl, token, date, data, rawMarkdown) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ data, raw_markdown: rawMarkdown }),
+    body: JSON.stringify({ data, raw_markdown: rawMarkdown, expected_updated_at: expectedUpdatedAt }),
   };
   return mutateRequest({
     url,
     options,
     label: '保存身体记录',
+    expectedUpdatedAt,
     optimistic: () => {
       const merged = { date, ...data };
       const idx = state.data.body_logs.findIndex((b) => String(b.date) === String(date));
@@ -287,6 +306,7 @@ async function fetchSaveBody(apiUrl, token, date, data, rawMarkdown) {
 /** 保存单条路线：PUT /routes/:slug（存在则更新、不存在则插入）。body = { data, raw_markdown? }。 */
 async function fetchSaveRoute(apiUrl, token, slug, payload) {
   const url = `${apiBase(apiUrl)}/routes/${encodeURIComponent(slug)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('routes', slug);
   const options = {
     method: 'PUT',
     headers: {
@@ -294,12 +314,13 @@ async function fetchSaveRoute(apiUrl, token, slug, payload) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, expected_updated_at: expectedUpdatedAt }),
   };
   return mutateRequest({
     url,
     options,
     label: '保存路线',
+    expectedUpdatedAt,
     optimistic: () => {
       const merged = { slug, ...payload.data };
       const idx = state.data.routes.findIndex((r) => r.slug === slug);
@@ -332,6 +353,7 @@ async function fetchRecommend(apiUrl, token, payload) {
 /** 保存计划：POST /plans。 */
 async function fetchSavePlan(apiUrl, token, payload) {
   const url = `${apiBase(apiUrl)}/plans`;
+  const expectedUpdatedAt = payload.id ? getExpectedUpdatedAt('plans', payload.id) : undefined;
   const options = {
     method: 'POST',
     headers: {
@@ -339,12 +361,13 @@ async function fetchSavePlan(apiUrl, token, payload) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, expected_updated_at: expectedUpdatedAt }),
   };
   return mutateRequest({
     url,
     options,
     label: '保存计划',
+    expectedUpdatedAt,
     optimistic: () => {
       const merged = { id: payload.id || ('offline-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))), ...payload };
       const idx = state.data.plans.findIndex((p) => p.id != null && String(p.id) === String(merged.id));

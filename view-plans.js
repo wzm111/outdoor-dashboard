@@ -6,6 +6,7 @@
 /** 更新计划：PUT /plans/:id。 */
 async function fetchUpdatePlan(apiUrl, token, id, payload) {
   const url = `${apiBase(apiUrl)}/plans/${encodeURIComponent(id)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('plans', id);
   const options = {
     method: 'PUT',
     headers: {
@@ -13,12 +14,13 @@ async function fetchUpdatePlan(apiUrl, token, id, payload) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, expected_updated_at: expectedUpdatedAt }),
   };
   return mutateRequest({
     url,
     options,
     label: '更新计划',
+    expectedUpdatedAt,
     optimistic: () => {
       const idx = state.data.plans.findIndex((p) => String(p.id) === String(id));
       if (idx >= 0) state.data.plans[idx] = { ...state.data.plans[idx], ...payload.data };

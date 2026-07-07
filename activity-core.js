@@ -161,6 +161,7 @@ function renderActivityAiResult(container, parsed, provider) {
 /** 更新单条活动：PUT /activities/:id。 */
 async function fetchUpdateActivity(apiUrl, token, id, payload) {
   const url = `${apiBase(apiUrl)}/activities/${encodeURIComponent(id)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('activities', id);
   const options = {
     method: 'PUT',
     headers: {
@@ -168,12 +169,13 @@ async function fetchUpdateActivity(apiUrl, token, id, payload) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, expected_updated_at: expectedUpdatedAt }),
   };
   return mutateRequest({
     url,
     options,
     label: '更新活动',
+    expectedUpdatedAt,
     optimistic: () => {
       const idx = state.data.activities.findIndex((a) => String(a.id) === String(id));
       if (idx >= 0) {

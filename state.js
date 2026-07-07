@@ -205,7 +205,7 @@ async function importBackup(file) {
   updateOfflineBanner();
   toast('备份已恢复到本地，联网后将自动同步', 'info');
 }
-async function mutateRequest({ url, options, label, optimistic }) {
+async function mutateRequest({ url, options, label, optimistic, expectedUpdatedAt }) {
   if (navigator.onLine) {
     const res = await fetchWithTimeout(url, options, 30000, label);
     if (!res.ok) {
@@ -220,6 +220,7 @@ async function mutateRequest({ url, options, label, optimistic }) {
     url,
     headers: options.headers,
     body: options.body,
+    expectedUpdatedAt,
   });
   if (optimistic) optimistic();
   updateOfflineBanner();
