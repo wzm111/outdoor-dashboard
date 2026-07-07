@@ -48,7 +48,29 @@ function clearConfig() {
   try {
     localStorage.removeItem(LS_KEY);
     localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(CACHE_KEY + '-meta');
   } catch { /* ignore */ }
+}
+
+/** 读取同步元数据：用于决定是否可增量同步。 */
+function loadSyncMeta() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY + '-meta');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+/** 保存同步元数据，包含服务端返回的 lastSyncAt 与当前 App 版本。 */
+function saveSyncMeta({ lastSyncAt, cachedAt } = {}) {
+  try {
+    const meta = {
+      cachedAt: cachedAt || new Date().toISOString(),
+      lastSyncAt: lastSyncAt || new Date().toISOString(),
+      schemaVersion: window.__APP_VERSION || '',
+    };
+    localStorage.setItem(CACHE_KEY + '-meta', JSON.stringify(meta));
+    offlineState.cachedAt = meta.cachedAt;
+  } catch { /* 隐私模式可能禁用，忽略 */ }
 }
 
 function showAuthError(msg) {

@@ -67,7 +67,9 @@ async function fetchToken(apiUrl, secret) {
   return json.token;
 }
 
-async function fetchExport(apiUrl, token) {
+async function fetchExport(apiUrl, token, since = null) {
+  const payload = { action: 'export' };
+  if (since) payload.since = since;
   const res = await fetchWithTimeout(`${apiBase(apiUrl)}/sync`, {
     method: 'POST',
     headers: {
@@ -75,7 +77,7 @@ async function fetchExport(apiUrl, token) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ action: 'export' }),
+    body: JSON.stringify(payload),
   }, 30000, '拉取数据');
   if (!res.ok) {
     const text = await res.text().catch(() => '');

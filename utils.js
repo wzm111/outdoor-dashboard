@@ -193,6 +193,9 @@ function unwrap(row) {
   if ('sequence' in row) flat.sequence = row.sequence;
   // 保留原始 Markdown（脚本侧 _unwrap 同名约定）：写回时需回传，且要在其中同步 frontmatter 的 gear_used 块。
   if ('raw_markdown' in row) flat._raw_markdown = row.raw_markdown;
+  // 保留服务端时间戳，供增量同步与调试使用
+  if ('updated_at' in row) flat._updated_at = row.updated_at;
+  if ('created_at' in row) flat._created_at = row.created_at;
   return flat;
 }
 

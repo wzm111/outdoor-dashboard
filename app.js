@@ -17,29 +17,46 @@ async function loadAndRender(isRefresh = false) {
   const loading = $('#loading');
   loading.hidden = false;
   $('#sync-status').textContent = '';
+
+  const cached = (() => { try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch { return null; } })();
+  const meta = loadSyncMeta();
+  const canIncremental = !!cached && !!meta && !!meta.lastSyncAt && meta.schemaVersion === window.__APP_VERSION;
+
   try {
-    const raw = await fetchExport(state.apiUrl, state.token);
-    console.log('🟢 [loadAndRender] 拿到数据 gear=' + (raw.gear ? raw.gear.length : '?') + ' activities=' + (raw.activities ? raw.activities.length : '?'));
-    state.data = {
-      profile: unwrap(raw.profile),
-      gear: unwrapList(raw.gear),
-      routes: unwrapList(raw.routes),
-      activities: unwrapList(raw.activities),
-      body_logs: unwrapList(raw.body_logs),
-      plans: unwrapList(raw.plans),
-      segments: unwrapList(raw.segments),
-    };
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(state.data));
-      offlineState.cachedAt = new Date().toISOString();
-      try { localStorage.setItem(CACHE_KEY + '-meta', JSON.stringify({ cachedAt: offlineState.cachedAt })); } catch {}
-    } catch {}
+    let raw;
+    let isDelta = false;
+    if (canIncremental) {
+      console.log('🔵 [loadAndRender] 尝试增量同步 since=' + meta.lastSyncAt);
+      raw = await fetchExport(state.apiUrl, state.token, meta.lastSyncAt);
+      isDelta = !!raw.delta;
+      console.log('🟢 [loadAndRender] 增量响应 delta=' + isDelta + ' gear=' + (raw.gear ? raw.gear.length : 0));
+    } else {
+      console.log('🔵 [loadAndRender] 走全量同步');
+      raw = await fetchExport(state.apiUrl, state.token);
+    }
+
+    if (isDelta) {
+      state.data = applySyncDelta(cached || state.data, raw);
+    } else {
+      state.data = {
+        profile: unwrap(raw.profile),
+        gear: unwrapList(raw.gear),
+        routes: unwrapList(raw.routes),
+        activities: unwrapList(raw.activities),
+        body_logs: unwrapList(raw.body_logs),
+        plans: unwrapList(raw.plans),
+        segments: unwrapList(raw.segments),
+      };
+    }
+
+    await saveSnapshot();
+    saveSyncMeta({ lastSyncAt: raw.server_now || new Date().toISOString() });
     renderAll();
     showDashboard();
-    $('#sync-status').textContent = '✓ 已同步';
+    $('#sync-status').textContent = isDelta ? '✓ 已增量同步' : '✓ 已同步';
   } catch (err) {
+    console.log('🔴 [loadAndRender] 失败: ' + (err && err.message ? err.message : err));
     // 失败时尝试用缓存快照（离线/PWA）
-    const cached = (() => { try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch { return null; } })();
     if (cached) {
       state.data = cached;
       renderAll();
@@ -53,6 +70,50 @@ async function loadAndRender(isRefresh = false) {
   } finally {
     loading.hidden = true;
   }
+}
+
+/** 将服务端增量包合并到本地 state.data：updated 按主键 upsert，deleted 按主键移除。 */
+function applySyncDelta(currentData, delta) {
+  if (!currentData || !delta) return currentData;
+  const result = { ...currentData };
+
+  const upsertByKey = (arr, rows, keyFn) => {
+    if (!Array.isArray(rows) || !Array.isArray(arr)) return arr;
+    const list = arr.slice();
+    for (const row of rows) {
+      const item = unwrap(row);
+      const key = keyFn(item);
+      const idx = list.findIndex((x) => String(keyFn(x)) === String(key));
+      if (idx >= 0) list[idx] = item;
+      else list.push(item);
+    }
+    return list;
+  };
+
+  const removeByKey = (arr, keys, keyFn) => {
+    if (!Array.isArray(keys) || !keys.length || !Array.isArray(arr)) return arr;
+    const keySet = new Set(keys.map(String));
+    return arr.filter((x) => !keySet.has(String(keyFn(x))));
+  };
+
+  if (delta.profile) result.profile = unwrap(delta.profile);
+
+  result.gear = upsertByKey(result.gear, delta.gear, (g) => g.slug);
+  result.routes = upsertByKey(result.routes, delta.routes, (r) => r.slug);
+  result.activities = upsertByKey(result.activities, delta.activities, (a) => a.id);
+  result.body_logs = upsertByKey(result.body_logs, delta.body_logs, (b) => b.date);
+  result.plans = upsertByKey(result.plans, delta.plans, (p) => p.id);
+  result.segments = upsertByKey(result.segments, delta.segments, (s) => s.slug);
+
+  const deleted = delta.deleted || {};
+  result.gear = removeByKey(result.gear, deleted.gear, (g) => g.slug);
+  result.routes = removeByKey(result.routes, deleted.routes, (r) => r.slug);
+  result.activities = removeByKey(result.activities, deleted.activities, (a) => a.id);
+  result.body_logs = removeByKey(result.body_logs, deleted.body_logs, (b) => b.date);
+  result.plans = removeByKey(result.plans, deleted.plans, (p) => p.id);
+  result.segments = removeByKey(result.segments, deleted.segments, (s) => s.slug);
+
+  return result;
 }
 
 function renderAll() {
