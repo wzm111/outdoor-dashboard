@@ -280,14 +280,22 @@ function routeDetailExtended(r) {
       el('div', {}, String(r.suggested_days) + ' 天')));
   }
   if (Array.isArray(r.suitable_for) && r.suitable_for.length) {
-    blocks.push(el('div', { class: 'route-extended-block' },
+    const text = r.suitable_for
+      .map((x) => (typeof x === 'string' ? x : (x && (x.label || x.value || x.name)) || ''))
+      .filter(Boolean)
+      .join('、');
+    if (text) blocks.push(el('div', { class: 'route-extended-block' },
       el('div', { class: 'route-extended-title' }, '适合人群'),
-      el('div', {}, r.suitable_for.join('、'))));
+      el('div', {}, text)));
   }
   if (Array.isArray(r.not_suitable_for) && r.not_suitable_for.length) {
-    blocks.push(el('div', { class: 'route-extended-block' },
+    const text = r.not_suitable_for
+      .map((x) => (typeof x === 'string' ? x : (x && (x.label || x.value || x.name)) || ''))
+      .filter(Boolean)
+      .join('、');
+    if (text) blocks.push(el('div', { class: 'route-extended-block' },
       el('div', { class: 'route-extended-title' }, '不适合人群'),
-      el('div', {}, r.not_suitable_for.join('、'))));
+      el('div', {}, text)));
   }
   if (r.trail_condition) {
     blocks.push(el('div', { class: 'route-extended-block' },
