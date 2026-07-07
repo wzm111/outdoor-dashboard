@@ -29,6 +29,55 @@ function parseCommaList(v) {
   return String(v).split(/[,，/、]/).map((s) => s.trim()).filter(Boolean);
 }
 
+/** 把英文枚举数组翻译成中文，未命中时保留原文。 */
+function translateList(arr, map) {
+  if (!arr) return '';
+  const list = Array.isArray(arr) ? arr : String(arr).split(/[,，/、]/);
+  return list
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .map((s) => map[s] || s)
+    .join('、');
+}
+
+const TERRAIN_MAP = {
+  trail: '土路/步道',
+  road: '公路',
+  rock: '岩石',
+  grass: '草地',
+  ridge: '山脊',
+  scree: '碎石坡',
+  snow: '雪地',
+  mud: '泥地',
+  forest: '森林',
+  desert: '沙漠',
+  wetland: '湿地',
+  paved: '铺装路面',
+  steps: '台阶',
+  river: '涉水',
+  offtrail: '无路野径',
+};
+
+const SEASON_MAP = {
+  spring: '春季',
+  summer: '夏季',
+  autumn: '秋季',
+  winter: '冬季',
+};
+
+const WATER_SOURCE_MAP = {
+  start: '起点',
+  finish: '终点',
+  summit: '山顶',
+  stream: '溪流',
+  river: '河流',
+  lake: '湖泊',
+  hut: '小屋/补给点',
+  summit_huts: '山顶小屋',
+  campsite: '营地',
+  none: '无水源',
+};
+
 /** 弹窗手动添加/编辑路线。 */
 function openAddRoute(route = null) {
   if (!state.token) { toast('请先连接后再添加路线', 'warn'); return; }
@@ -249,11 +298,11 @@ function routeDetailMetadata(r) {
   const items = [];
   if (r.location) items.push(['地点', r.location]);
   if (r.weather_city) items.push(['天气城市', r.weather_city]);
-  const terrain = fmtStringList(r.terrain);
+  const terrain = translateList(r.terrain, TERRAIN_MAP);
   if (terrain) items.push(['地形', terrain]);
-  const seasons = fmtStringList(r.best_seasons);
+  const seasons = translateList(r.best_seasons, SEASON_MAP);
   if (seasons) items.push(['最佳季节', seasons]);
-  const water = fmtStringList(r.water_sources);
+  const water = translateList(r.water_sources, WATER_SOURCE_MAP);
   if (water) items.push(['水源', water]);
   if (r.source_url) {
     items.push(['来源', el('a', { href: r.source_url, target: '_blank', rel: 'noopener' }, r.source_url)]);
