@@ -213,8 +213,8 @@ function activityTable(acts, sport) {
     });
     cells.push(el('td', { class: 'actions' }, editBtn, delBtn));
 
-    const tr = el('tr', { class: 'activity-row', title: '点击查看本次装备' }, ...cells);
-    tr.addEventListener('click', () => openActivityGear(a, gearMap));
+    const tr = el('tr', { class: 'activity-row', title: '点击查看详情' }, ...cells);
+    tr.addEventListener('click', () => openActivityDetail(a, gearMap));
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
@@ -229,6 +229,154 @@ function feltStars(felt) {
   const filled = '★'.repeat(n);
   const empty = '☆'.repeat(5 - n);
   return el('span', { class: 'stars', title: felt }, filled + empty);
+}
+
+/** 打开活动详情弹窗：展示运动类型专属统计、备注/天气/不适、装备列表与操作入口。 */
+function openActivityDetail(activity, gearMap) {
+  const map = gearMap || new Map((state.data.gear || []).map((g) => [g.slug, g]));
+  const wrap = el('div', { class: 'activity-detail' });
+
+  // 顶部类型/序列元信息
+  const sport = activitySport(activity.type);
+  const metaItems = [
+    sportLabel(sport),
+    activity.type && activity.type !== sport ? activityTypeLabel(activity.type) : null,
+    activity.sequence > 0 ? `第 ${Number(activity.sequence) + 1} 次` : null,
+  ].filter(Boolean);
+  wrap.appendChild(el('div', { class: 'activity-detail-meta' }, metaItems.join(' · ')));
+
+  // 统计网格（按运动类型展示关键字段）
+  const stats = [];
+  const addStat = (label, value) => {
+    if (value != null && value !== '') stats.push({ label, value });
+  };
+
+  if (activity.distance_km != null) addStat('距离', num(activity.distance_km, sport === 'running' ? 2 : 1) + ' km');
+  if (activity.duration_hours != null) addStat('时长', fmtDuration(activity.duration_hours));
+
+  if (sport === 'running') {
+    addStat('配速', paceMinPerKm(activity.distance_km, activity.duration_hours) || '—');
+    if (activity.cadence) addStat('步频', activity.cadence + ' spm');
+    if (activity.stride_length_m) addStat('步幅', num(activity.stride_length_m, 2) + ' m');
+  } else if (sport === 'hiking') {
+    if (activity.elevation_gain_m != null) addStat('爬升', num(activity.elevation_gain_m, 0) + ' m');
+    if (activity.elevation_loss_m != null) addStat('下降', num(activity.elevation_loss_m, 0) + ' m');
+    if (activity.max_altitude_m) addStat('最高海拔', num(activity.max_altitude_m, 0) + ' m');
+    if (activity.load_type) addStat('负重', loadTypeLabel(activity.load_type));
+    const days = hikingDays(activity.date, activity.end_date);
+    if (days > 1) addStat('天数', days + ' 天');
+  } else if (sport === 'climbing') {
+    addStat('类型', disciplineLabel(activity.discipline));
+    addStat('难度', activity.grade || '—');
+    if (activity.problems_count != null) addStat('线路数', activity.problems_count);
+    addStat('完攀方式', sendTypeLabel(activity.send_type));
+    if (activity.attempts) addStat('尝试次数', activity.attempts);
+  } else if (sport === 'cycling') {
+    if (activity.elevation_gain_m != null) addStat('爬升', num(activity.elevation_gain_m, 0) + ' m');
+    const speed = activity.avg_speed_kmh != null ? activity.avg_speed_kmh : avgSpeedKmh(activity.distance_km, activity.duration_hours);
+    if (speed != null) addStat('均速', num(speed, 1) + ' km/h');
+    if (activity.max_speed_kmh) addStat('最高速', num(activity.max_speed_kmh, 1) + ' km/h');
+    if (activity.power_avg_w) addStat('平均功率', num(activity.power_avg_w, 0) + ' W');
+  }
+
+  if (activity.avg_hr) addStat('平均心率', Math.round(activity.avg_hr) + ' bpm');
+  if (activity.max_hr) addStat('最大心率', Math.round(activity.max_hr) + ' bpm');
+  addStat('感受', feltStars(activity.felt));
+
+  const grid = el('div', { class: 'activity-detail-stats' });
+  for (const s of stats) {
+    grid.appendChild(
+      el('div', { class: 'activity-detail-stat' },
+        el('div', { class: 'activity-detail-stat-value' }, s.value),
+        el('div', { class: 'activity-detail-stat-label' }, s.label)
+      )
+    );
+  }
+  wrap.appendChild(grid);
+
+  // 天气 / 不适 / 备注
+  if (activity.weather) {
+    wrap.appendChild(el('div', { class: 'activity-detail-section-title' }, '天气'));
+    wrap.appendChild(el('div', { class: 'activity-detail-text' }, activity.weather));
+  }
+  const issues = Array.isArray(activity.issues) ? activity.issues.filter(Boolean) : [];
+  if (issues.length) {
+    wrap.appendChild(el('div', { class: 'activity-detail-section-title' }, '身体不适'));
+    wrap.appendChild(
+      el('div', { class: 'activity-detail-issues' },
+        ...issues.map((i) => el('span', { class: 'activity-detail-issue' }, i))
+      )
+    );
+  }
+  if (activity.notes) {
+    wrap.appendChild(el('div', { class: 'activity-detail-section-title' }, '备注'));
+    wrap.appendChild(el('div', { class: 'activity-detail-text' }, activity.notes));
+  }
+
+  // 装备清单
+  const slugs = gearSlugsOf(activity);
+  wrap.appendChild(el('div', { class: 'activity-detail-section-title' }, `装备 (${slugs.length})`));
+  if (!slugs.length) {
+    wrap.appendChild(el('div', { class: 'empty' }, '未记录装备'));
+  } else {
+    const gearList = el('div', { class: 'rel-list activity-detail-gear-list' });
+    let totalWeight = 0, weighed = 0;
+    for (const slug of slugs) {
+      const g = map.get(slug);
+      if (g && g.weight_g != null) { totalWeight += Number(g.weight_g); weighed += 1; }
+      const item = el('div', { class: 'rel-item' + (g ? '' : ' rel-item-missing') });
+      const info = el('div', { class: 'rel-info' });
+      if (g) {
+        info.appendChild(el('div', { class: 'rel-name' }, g.name || g.slug));
+        info.appendChild(
+          el('div', { class: 'rel-brief' },
+            [g.brand, g.weight_g != null ? num(g.weight_g, 0) + ' g' : null, categoryLabel(g.category || '未分类')]
+              .filter(Boolean).join(' · ') || '—'
+          )
+        );
+      } else {
+        info.appendChild(el('div', { class: 'rel-name' }, '未知装备'));
+        info.appendChild(el('div', { class: 'rel-brief' }, slug));
+      }
+      item.appendChild(info);
+      if (g) {
+        const detailBtn = el('button', { class: 'btn-sm' }, '详情');
+        detailBtn.addEventListener('click', (e) => { e.stopPropagation(); openGearDetail(g); });
+        item.appendChild(detailBtn);
+      }
+      gearList.appendChild(item);
+    }
+    wrap.appendChild(gearList);
+    if (weighed) {
+      wrap.appendChild(
+        el('div', { class: 'activity-detail-gear-total' },
+          `记录装备中 ${weighed} 件有重量，合计约 ${num(totalWeight, 0)} g`
+        )
+      );
+    }
+  }
+
+  const editBtn = el('button', { class: 'btn btn-primary' }, '编辑');
+  const gearBtn = el('button', { class: 'btn' }, '管理装备');
+  const delBtn = el('button', { class: 'btn btn-danger-outline', 'data-no-autoclose': '1' }, '删除');
+  const closeBtn = el('button', { class: 'btn' }, '关闭');
+
+  const close = showModal(`${fmtDate(activity.date)} · ${activity.route || '活动'}`, wrap, [editBtn, gearBtn, delBtn, closeBtn]);
+
+  editBtn.addEventListener('click', () => { close(); openAddActivity(activity); });
+  gearBtn.addEventListener('click', () => { close(); openActivityGear(activity, map); });
+  delBtn.addEventListener('click', async () => {
+    const routeLabel = (activity.route || '活动') + (activity.sequence > 0 ? ` #${Number(activity.sequence) + 1}` : '');
+    if (!confirm(`确定删除 ${fmtDate(activity.date)} · ${routeLabel} 吗？此操作不可恢复。`)) return;
+    try {
+      await fetchDelete(state.apiUrl, state.token, 'activities', activity.id);
+      toast('已删除', 'success');
+      close();
+      await loadAndRender(true);
+    } catch (err) {
+      toast(err.message || '删除失败', 'error');
+    }
+  });
 }
 
 /** 活动 → 装备：弹窗列出本次活动用过的装备，可点进装备详情。 */

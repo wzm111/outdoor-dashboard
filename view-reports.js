@@ -845,7 +845,50 @@ function renderBodyAgeSection(profile, activities, bodyLogs) {
       '基于心肺功能、训练负荷、恢复状态与 BMI 的参考估算，点击卡片查看详细分解。'
     )
   );
+
+  // 身体年龄趋势：基于历史身体日志采样计算
+  const trend = computeBodyAgeTrend(profile, activities, bodyLogs || []);
+  if (trend.length >= 2) {
+    const age = Number(profile.age) || 30;
+    section.appendChild(lineChartCard('身体年龄趋势', trend, 'body_age', '#a78bfa', Math.max(12, age - 15), age + 15));
+  }
+
   return section;
+}
+
+/** 在历史身体日志日期上采样计算身体年龄，返回 {date, body_age, delta, confidence}[]。 */
+function computeBodyAgeTrend(profile, activities, bodyLogs) {
+  if (!profile || !profile.age) return [];
+
+  const sortedLogs = (bodyLogs || [])
+    .filter((b) => b.date)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  if (sortedLogs.length < 2) return [];
+
+  const points = [];
+  let lastDate = null;
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const log of sortedLogs) {
+    const d = baParseDate(log.date);
+    if (!d) continue;
+    if (lastDate && baDaysBetween(lastDate, d) < 14) continue;
+    const ds = baDateStr(d);
+    const actsUpTo = activities.filter((a) => a.date && String(a.date) <= ds);
+    const logsUpTo = sortedLogs.filter((b) => String(b.date) <= ds);
+    const r = computeBodyAge(profile, actsUpTo, logsUpTo, ds);
+    if (r.body_age != null) {
+      points.push({ date: ds, body_age: r.body_age, delta: r.delta, confidence: r.confidence });
+      lastDate = d;
+    }
+  }
+
+  const latest = computeBodyAge(profile, activities, bodyLogs, today);
+  if (latest.body_age != null && (!points.length || points[points.length - 1].date !== today)) {
+    points.push({ date: today, body_age: latest.body_age, delta: latest.delta, confidence: latest.confidence });
+  }
+
+  return points;
 }
 
 // ---------- 训练负荷（ACWR + 疲劳 + 周历史） ----------

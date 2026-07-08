@@ -1327,6 +1327,22 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 .body-age-report-meta { text-align: right; font-size: 13px; color: var(--text-dim); max-width: 60%; }
 .body-age-report-explanation { margin-top: 6px; line-height: 1.5; }
 
+.body-age-section .chart-card { margin-top: 16px; }
+
+/* 活动详情弹窗 */
+.activity-detail { font-size: 14px; }
+.activity-detail-meta { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+.activity-detail-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.activity-detail-stat { background: var(--bg-elev); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
+.activity-detail-stat-value { font-size: 16px; font-weight: 700; color: var(--text); }
+.activity-detail-stat-label { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.activity-detail-section-title { font-size: 12px; color: var(--text-dim); font-weight: 600; margin: 14px 0 8px; text-transform: uppercase; letter-spacing: 0.3px; }
+.activity-detail-text { color: var(--text); line-height: 1.5; background: var(--bg-elev); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; }
+.activity-detail-issues { display: flex; flex-wrap: wrap; gap: 6px; }
+.activity-detail-issue { background: rgba(239, 68, 68, 0.1); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.activity-detail-gear-list { margin-bottom: 8px; }
+.activity-detail-gear-total { font-size: 12px; color: var(--text-dim); text-align: right; }
+
 .segment-table {
   width: 100%;
   border-collapse: collapse;
