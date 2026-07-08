@@ -169,6 +169,88 @@ function drawDonut(canvas, slices) {
   }
 }
 
+// ---------- 柱状图 ----------
+
+function barChartCard(title, bars, opts = {}) {
+  const card = el('div', { class: 'chart-card' });
+  card.appendChild(el('h3', {}, title));
+  if (!bars || !bars.length) {
+    card.appendChild(el('div', { class: 'empty' }, '无数据'));
+    return card;
+  }
+  const canvas = el('canvas');
+  card.appendChild(canvas);
+  requestAnimationFrame(() => drawBars(canvas, bars, opts));
+  return card;
+}
+
+function drawBars(canvas, bars, opts = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 600;
+  const cssH = opts.height || 180;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const padL = opts.padL || 44;
+  const padR = opts.padR || 12;
+  const padT = opts.padT || 16;
+  const padB = opts.padB || 34;
+  const w = cssW - padL - padR;
+  const h = cssH - padT - padB;
+
+  const vals = bars.map((b) => Number(b.value) || 0);
+  let max = Math.max(...vals);
+  if (max === 0) max = 1;
+  max *= 1.1;
+
+  const css = getComputedStyle(document.body);
+  const gridColor = css.getPropertyValue('--border').trim() || '#2a3340';
+  const dimColor = css.getPropertyValue('--text-dim').trim() || '#9aa7b4';
+  const accentColor = opts.color || css.getPropertyValue('--accent').trim() || '#4ade80';
+
+  // 网格 + Y 轴
+  ctx.strokeStyle = gridColor;
+  ctx.fillStyle = dimColor;
+  ctx.font = '11px sans-serif';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const gv = (max * i) / 4;
+    const gy = padT + h - (gv / max) * h;
+    ctx.beginPath();
+    ctx.moveTo(padL, gy);
+    ctx.lineTo(cssW - padR, gy);
+    ctx.stroke();
+    ctx.fillText(gv.toFixed(gv >= 100 ? 0 : 1), 4, gy + 4);
+  }
+
+  const gapRatio = opts.gapRatio || 0.35;
+  const barW = w / (bars.length * (1 + gapRatio) - gapRatio);
+  const gap = barW * gapRatio;
+
+  for (let i = 0; i < bars.length; i++) {
+    const v = vals[i];
+    const bh = (v / max) * h;
+    const bx = padL + i * (barW + gap);
+    const by = padT + h - bh;
+
+    ctx.fillStyle = bars[i].color || accentColor;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, barW, bh, Math.min(4, barW / 3));
+    ctx.fill();
+
+    // X 轴标签（隔一个显示，避免拥挤）
+    if (bars.length <= 8 || i % 2 === 0) {
+      ctx.fillStyle = dimColor;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(bars[i].label || ''), bx + barW / 2, cssH - 10);
+    }
+  }
+  ctx.textAlign = 'start';
+}
+
 // ---------- 海拔剖面图 ----------
 
 function elevationProfileCard(title, points, opts = {}) {

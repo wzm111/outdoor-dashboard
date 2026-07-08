@@ -17,6 +17,7 @@ function renderReports() {
   const activities = data.activities || [];
   const gear = data.gear || [];
   const segments = data.segments || [];
+  const bodyLogs = data.body_logs || [];
   const profile = data.profile || {};
   const today = new Date().toISOString().slice(0, 10);
 
@@ -52,6 +53,9 @@ function renderReports() {
   const metrics = computeTrainingMetrics(activities, profile);
   if (metrics && metrics.series && metrics.series.length > 0) {
     const latest = metrics.latest || metrics.series[metrics.series.length - 1];
+    const status = metrics.status || {};
+    const trendText = metrics.ctlTrend || '数据不足';
+
     const trainingHeader = el('div', { class: 'section-title', style: 'margin-top:20px;' },
       el('span', {}, '训练状态'),
       el('span', { class: 'metric-badges' },
@@ -62,23 +66,65 @@ function renderReports() {
     );
     view.appendChild(trainingHeader);
 
+    // 状态评估卡
+    const statusCard = el('div', { class: 'report-card training-status-card' });
+    statusCard.appendChild(
+      el('div', { class: 'training-status-row' },
+        el('span', { class: 'training-status-emoji' }, status.emoji || ''),
+        el('span', { class: 'training-status-text' }, status.text || ''),
+        el('span', { class: 'training-trend-text' }, `CTL 趋势：${trendText}`)
+      )
+    );
+    statusCard.appendChild(el('div', { class: 'report-hint' }, status.advice || ''));
+    view.appendChild(statusCard);
+
     const chartGrid = el('div', { class: 'reports-grid' });
     chartGrid.appendChild(lineChartCard('慢性训练负荷 CTL', metrics.series, 'ctl', '#3b82f6'));
     chartGrid.appendChild(lineChartCard('急性训练负荷 ATL', metrics.series, 'atl', '#f59e0b'));
     chartGrid.appendChild(lineChartCard('训练状态平衡 TSB', metrics.series, 'tsb', latest.tsb >= 0 ? '#22c55e' : '#ef4444'));
     view.appendChild(chartGrid);
 
-    const tsbHint = el('div', { class: 'report-hint' },
-      latest.tsb > 25 ? '状态良好，适合挑战或比赛。' :
-      latest.tsb >= -10 ? '处于正常训练区间。' :
-      latest.tsb >= -30 ? '疲劳积累，注意恢复。' : '过度训练风险，建议休息。'
-    );
-    view.appendChild(tsbHint);
+    // 周 TSS 汇总
+    if (metrics.weeklySummary && Object.keys(metrics.weeklySummary).length) {
+      const tssBars = Object.entries(metrics.weeklySummary)
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+        .slice(-8)
+        .map(([week, d]) => ({ label: week.slice(5), value: d.tssTotal || 0 }));
+      view.appendChild(barChartCard('近 8 周 TSS 总量', tssBars, { color: '#8b5cf6' }));
+    }
+
+    // 近期活动 TSS 明细
+    if (metrics.activityDetails && metrics.activityDetails.length) {
+      const tssSection = el('div', { class: 'report-card' });
+      tssSection.appendChild(el('h3', {}, '近期活动 TSS 明细'));
+      const table = el('table', { class: 'tss-table' });
+      table.innerHTML = `<thead><tr><th>日期</th><th>路线</th><th>类型</th><th>距离</th><th>时长</th><th>心率</th><th>TSS</th><th>感受</th></tr></thead>`;
+      const tbody = el('tbody');
+      for (const a of metrics.activityDetails.slice(-10).reverse()) {
+        const tr = el('tr');
+        tr.appendChild(el('td', {}, fmtDate(a.date)));
+        tr.appendChild(el('td', {}, a.route || '—'));
+        tr.appendChild(el('td', {}, activityTypeLabel(a.type)));
+        tr.appendChild(el('td', {}, a.distance_km != null ? num(a.distance_km, 1) + ' km' : '—'));
+        tr.appendChild(el('td', {}, a.duration_hours != null ? num(a.duration_hours, 1) + ' h' : '—'));
+        tr.appendChild(el('td', {}, a.avg_hr ? Math.round(a.avg_hr) + ' bpm' : '—'));
+        tr.appendChild(el('td', {}, el('span', { class: 'tss-badge' }, Math.round(a.tss || 0))));
+        tr.appendChild(el('td', {}, a.felt || '—'));
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      tssSection.appendChild(table);
+      view.appendChild(tssSection);
+    }
   } else {
     view.appendChild(el('div', { class: 'empty' }, '训练指标需要至少一条带距离或心率的活动记录'));
   }
 
-  // 4. 装备重量分类报告
+  // 4. 训练负荷（ACWR + 疲劳 + 周历史）
+  const loadSection = renderTrainingLoad(activities, bodyLogs, today);
+  view.appendChild(loadSection);
+
+  // 5. 装备重量分类报告
   const gwReport = computeGearWeightReport(gear);
   const gwSection = el('div', { class: 'report-card' });
   gwSection.appendChild(el('h3', {}, '装备重量分类'));
@@ -112,7 +158,7 @@ function renderReports() {
   }
   view.appendChild(gwSection);
 
-  // 5. Gear Health 摘要
+  // 6. Gear Health 摘要
   const activeGear = gear.filter((g) => g.condition !== 'retired');
   let alertCount = 0, warnCount = 0, idleCount = 0, okCount = 0;
   const gearAlerts = [];
@@ -144,11 +190,37 @@ function renderReports() {
       .forEach(({ g, st, level }) => {
         const lifecycle = computeGearLifecycle(g, activities, today);
         const advice = gearAiAdvice(g, lifecycle);
+        const info = el('div', { class: 'rel-info' },
+          el('div', { class: 'rel-name' }, g.name || g.slug),
+          el('div', { class: 'rel-brief gear-advice-line' }, advice || st.reasons.join('；'))
+        );
+
+        if (lifecycle.max_ratio > 0) {
+          const pct = Math.min(100, Math.round(lifecycle.max_ratio * 100));
+          const fillClass = pct >= 90 ? 'critical' : pct >= 70 ? 'warn' : 'good';
+          info.appendChild(
+            el('div', { class: 'gear-wear-line' },
+              el('div', { class: 'gear-wear-progress' },
+                el('div', { class: `gear-wear-fill ${fillClass}`, style: `width:${pct}%` })
+              ),
+              el('div', { class: 'rel-brief' }, `经验寿命 ${pct}% · 里程 ${num(lifecycle.total_distance_km, 1)} km · 使用 ${lifecycle.usage_count} 次`)
+            )
+          );
+        }
+
+        const maintenance = Array.isArray(g.maintenance_log) ? g.maintenance_log : (g.maintenance_log ? [g.maintenance_log] : []);
+        if (maintenance.length) {
+          const logWrap = el('div', { class: 'maintenance-log' },
+            el('div', { class: 'maintenance-log-title' }, '维护记录')
+          );
+          for (const entry of maintenance.slice(-3)) {
+            logWrap.appendChild(el('div', { class: 'maintenance-log-item' }, String(entry)));
+          }
+          info.appendChild(logWrap);
+        }
+
         const item = el('div', { class: 'rel-item' },
-          el('div', { class: 'rel-info' },
-            el('div', { class: 'rel-name' }, g.name || g.slug),
-            el('div', { class: 'rel-brief gear-advice-line' }, advice || st.reasons.join('；'))
-          ),
+          info,
           (() => {
             const btn = el('button', { class: 'btn-sm' }, '详情');
             btn.addEventListener('click', () => openGearDetail(g));
@@ -161,7 +233,7 @@ function renderReports() {
   }
   view.appendChild(gearSection);
 
-  // 6. 体能等级评估
+  // 7. 体能等级评估
   const fitness = computeFitnessAssessment(profile, activities, gear);
   const fitnessSection = el('div', { class: 'report-card' });
   fitnessSection.appendChild(el('h3', {}, '体能等级评估'));
@@ -226,31 +298,46 @@ function renderReports() {
   }
   view.appendChild(fitnessSection);
 
-  // 7. Segment PB 榜
+  // 8. Segment PB 榜
   const pbs = computeSegmentPBs(segments, activities);
   const pbSection = el('div', { class: 'report-card' });
   pbSection.appendChild(el('h3', {}, 'Segment 个人最佳'));
   if (!pbs.length) {
     pbSection.appendChild(el('div', { class: 'empty' }, '暂无路段或匹配记录'));
   } else {
-    const table = el('table', { class: 'segment-table' });
-    table.innerHTML = `<thead><tr><th>路段</th><th>路线</th><th>PB 用时</th><th>日期</th><th>趋势</th></tr></thead>`;
-    const tbody = el('tbody');
     for (const pb of pbs.slice(0, 10)) {
-      const tr = el('tr');
-      tr.appendChild(el('td', {}, pb.segmentName));
-      tr.appendChild(el('td', {}, pb.route || '—'));
-      tr.appendChild(el('td', {}, formatDuration(pb.best)));
-      tr.appendChild(el('td', {}, fmtDate(pb.date)));
-      tr.appendChild(el('td', {}, pb.trend));
-      tbody.appendChild(tr);
+      const block = el('div', { class: 'segment-pb-block' });
+      block.appendChild(
+        el('div', { class: 'segment-pb-header' },
+          el('span', { class: 'segment-pb-name' }, pb.segmentName),
+          el('span', { class: `segment-trend segment-trend-${pb.trendKey}` }, pb.trend),
+          el('span', { class: 'segment-pb-time' }, formatDuration(pb.best))
+        )
+      );
+      block.appendChild(
+        el('div', { class: 'segment-pb-meta' },
+          `${fmtDate(pb.date)} · ${pb.route || '—'} · ${pb.distance_km != null ? num(pb.distance_km, 1) + ' km' : '—'}`
+        )
+      );
+      if (pb.records && pb.records.length > 1) {
+        const mini = el('div', { class: 'segment-mini-records' });
+        for (const r of pb.records.slice(-3).reverse()) {
+          mini.appendChild(
+            el('div', { class: 'segment-mini-record' },
+              el('span', {}, fmtDate(r.date)),
+              el('span', {}, formatDuration(r.duration_hours)),
+              r.is_pb ? el('span', { class: 'segment-mini-pb' }, '⭐ PB') : null
+            )
+          );
+        }
+        block.appendChild(mini);
+      }
+      pbSection.appendChild(block);
     }
-    table.appendChild(tbody);
-    pbSection.appendChild(table);
   }
   view.appendChild(pbSection);
 
-  // 8. 本周最常用装备
+  // 9. 本周最常用装备
   const weekGear = getTopGearInRange(activities, gear, 7, 5);
   const gearRankSection = el('div', { class: 'report-card' });
   gearRankSection.appendChild(el('h3', {}, '本周最常用装备'));
@@ -597,37 +684,52 @@ function computeFitnessAssessment(profile, activities, gear) {
 
 // ---------- 训练指标 ----------
 
-function computeTrainingMetrics(activities, profile) {
-  if (!activities || activities.length === 0) return null;
+function calculateTss(activity, profile) {
   const maxHr = Number(profile.usual_heart_rate_max) || 185;
   const restingHr = Number(profile.resting_heart_rate) || 60;
   const hrReserve = Math.max(1, maxHr - restingHr);
 
+  const avgHr = Number(activity.avg_hr);
+  const durationHours = Number(activity.duration_hours);
+  if (avgHr && durationHours) {
+    const typeFactor = { running: 1.0, trail_running: 1.1, hiking: 0.8, climbing: 1.2, walking: 0.6 }[activity.type] || 0.8;
+    const ratio = Math.max(0.1, Math.min(1.0, (avgHr - restingHr) / hrReserve));
+    return durationHours * 60 * ratio * typeFactor;
+  }
+
+  const distance = Number(activity.distance_km) || 0;
+  const elevation = Number(activity.elevation_gain_m) || 0;
+  const duration = Number(activity.duration_hours) || 0;
+  const type = activity.type || 'hiking';
+  let base = 0;
+  if (type === 'running' || type === 'trail_running') base = distance * 8;
+  else if (type === 'hiking') base = distance * 5 + elevation * 0.1;
+  else if (type === 'climbing') base = duration * 15;
+  else base = distance * 5;
+  const feltMult = { easy: 0.7, moderate: 1.0, hard: 1.3, extreme: 1.6 }[activity.felt] || 1.0;
+  return base * feltMult;
+}
+
+function computeTrainingMetrics(activities, profile) {
+  if (!activities || activities.length === 0) return null;
+
   const dailyTss = {};
+  const activityDetails = [];
   for (const a of activities) {
     const date = String(a.date);
     if (!date) continue;
-    let tss = 0;
-    const avgHr = Number(a.avg_hr);
-    const durationHours = Number(a.duration_hours);
-    if (avgHr && durationHours) {
-      const typeFactor = { running: 1.0, trail_running: 1.1, hiking: 0.8, climbing: 1.2, walking: 0.6 }[a.type] || 0.8;
-      const ratio = Math.max(0.1, Math.min(1.0, (avgHr - restingHr) / hrReserve));
-      tss = durationHours * 60 * ratio * typeFactor;
-    } else {
-      const distance = Number(a.distance_km) || 0;
-      const elevation = Number(a.elevation_gain_m) || 0;
-      const duration = Number(a.duration_hours) || 0;
-      const type = a.type || 'hiking';
-      let base = 0;
-      if (type === 'running' || type === 'trail_running') base = distance * 8;
-      else if (type === 'hiking') base = distance * 5 + elevation * 0.1;
-      else if (type === 'climbing') base = duration * 15;
-      else base = distance * 5;
-      const feltMult = { easy: 0.7, moderate: 1.0, hard: 1.3, extreme: 1.6 }[a.felt] || 1.0;
-      tss = base * feltMult;
-    }
+    const tss = Math.round(calculateTss(a, profile));
     dailyTss[date] = (dailyTss[date] || 0) + tss;
+    activityDetails.push({
+      date,
+      route: a.route || '',
+      type: a.type || 'hiking',
+      distance_km: a.distance_km,
+      duration_hours: a.duration_hours,
+      avg_hr: a.avg_hr,
+      tss,
+      felt: a.felt || 'moderate',
+    });
   }
 
   const dates = Object.keys(dailyTss).sort();
@@ -641,15 +743,216 @@ function computeTrainingMetrics(activities, profile) {
   const atlDecay = 1 - 1 / 7;
   const ctlGain = 1 / 42;
   const atlGain = 1 / 7;
+
+  const weeklySummary = {};
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const ds = d.toISOString().slice(0, 10);
     const tss = dailyTss[ds] || 0;
     ctl = ctl * ctlDecay + tss * ctlGain;
     atl = atl * atlDecay + tss * atlGain;
-    series.push({ date: ds, ctl, atl, tsb: ctl - atl });
+    const tsb = ctl - atl;
+    series.push({ date: ds, ctl, atl, tsb });
+
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1));
+    const weekKey = monday.toISOString().slice(0, 10);
+    if (!weeklySummary[weekKey]) {
+      weeklySummary[weekKey] = { tssTotal: 0, activityCount: 0, ctlSum: 0, atlSum: 0, tsbSum: 0, dayCount: 0 };
+    }
+    weeklySummary[weekKey].tssTotal += tss;
+    weeklySummary[weekKey].activityCount += tss > 0 ? 1 : 0;
+    weeklySummary[weekKey].ctlSum += ctl;
+    weeklySummary[weekKey].atlSum += atl;
+    weeklySummary[weekKey].tsbSum += tsb;
+    weeklySummary[weekKey].dayCount += 1;
   }
 
-  return { series, latest: series[series.length - 1] };
+  for (const key of Object.keys(weeklySummary)) {
+    const w = weeklySummary[key];
+    w.ctlAvg = w.dayCount ? w.ctlSum / w.dayCount : 0;
+    w.atlAvg = w.dayCount ? w.atlSum / w.dayCount : 0;
+    w.tsbAvg = w.dayCount ? w.tsbSum / w.dayCount : 0;
+  }
+
+  const latest = series[series.length - 1];
+  const tsb = latest.tsb;
+  let status = {};
+  if (tsb > 25) {
+    status = { emoji: '🟢', text: '状态极佳', advice: '体能储备充足，适合挑战高强度路线或测试个人最佳。' };
+  } else if (tsb >= -10) {
+    status = { emoji: '🟡', text: '正常训练', advice: '处于正常训练区间，可按计划推进。' };
+  } else if (tsb >= -30) {
+    status = { emoji: '🟠', text: '疲劳积累', advice: '疲劳积累明显，建议降低强度并增加恢复时间。' };
+  } else {
+    status = { emoji: '🔴', text: '过度训练风险', advice: 'ATL 远高于 CTL，必须安排恢复周，避免伤病。' };
+  }
+
+  const weekKeys = Object.keys(weeklySummary).sort();
+  let ctlTrend = '数据不足';
+  if (weekKeys.length >= 4) {
+    const recent = weekKeys.slice(-2).map((k) => weeklySummary[k].ctlAvg);
+    const previous = weekKeys.slice(-4, -2).map((k) => weeklySummary[k].ctlAvg);
+    const recentAvg = recent.reduce((s, v) => s + v, 0) / recent.length;
+    const previousAvg = previous.reduce((s, v) => s + v, 0) / previous.length;
+    if (previousAvg > 0) {
+      if (recentAvg > previousAvg * 1.05) ctlTrend = '上升';
+      else if (recentAvg < previousAvg * 0.95) ctlTrend = '下降';
+      else ctlTrend = '平稳';
+    }
+  }
+
+  return { series, latest, status, ctlTrend, weeklySummary, activityDetails };
+}
+
+// ---------- 训练负荷（ACWR + 疲劳 + 周历史） ----------
+
+function renderTrainingLoad(activities, bodyLogs, today) {
+  const section = el('div', { class: 'report-card' });
+  section.appendChild(el('h3', {}, '训练负荷'));
+
+  const weeklyLoad = computeWeeklyLoad(activities, 8);
+  const acwr = computeACWR(weeklyLoad);
+  const fatigue = computeFatigueScore(bodyLogs);
+
+  const grid = el('div', { class: 'reports-grid three' });
+
+  // ACWR 卡片
+  const acwrCard = el('div', { class: `stat-card acwr-card acwr-risk-${acwr.risk}` });
+  acwrCard.appendChild(el('div', { class: 'label' }, 'ACWR 负荷比'));
+  acwrCard.appendChild(el('div', { class: 'value' }, acwr.ratio > 0 ? acwr.ratio.toFixed(2) : '—'));
+  acwrCard.appendChild(el('div', { class: 'unit' }, acwr.status));
+  if (acwr.ratio > 0) {
+    acwrCard.appendChild(el('div', { class: 'report-hint' }, `本周 ${num(acwr.acute, 1)} km / 前 4 周平均 ${num(acwr.chronic, 1)} km`));
+  }
+  grid.appendChild(acwrCard);
+
+  // 疲劳卡片
+  const fatigueCard = el('div', { class: `stat-card fatigue-card fatigue-score-${fatigue.levelKey || 'unknown'}` });
+  fatigueCard.appendChild(el('div', { class: 'label' }, '疲劳评分'));
+  fatigueCard.appendChild(el('div', { class: 'value' }, fatigue.score > 0 ? Math.round(fatigue.score) : '—'));
+  fatigueCard.appendChild(el('div', { class: 'unit' }, fatigue.status || '无数据'));
+  if (fatigue.score > 0) {
+    fatigueCard.appendChild(
+      el('div', { class: 'report-hint' },
+        `疲劳 ${fatigue.avgFatigue != null ? fatigue.avgFatigue.toFixed(1) : '—'} / 酸痛 ${fatigue.avgSoreness != null ? fatigue.avgSoreness.toFixed(1) : '—'} / 睡眠 ${fatigue.avgSleep != null ? fatigue.avgSleep.toFixed(1) : '—'}h`
+      )
+    );
+  }
+  grid.appendChild(fatigueCard);
+
+  // 本周对比上周
+  const weekKeys = Object.keys(weeklyLoad).sort();
+  const thisWeek = weeklyLoad[weekKeys[weekKeys.length - 1]] || { distance: 0, elevation: 0, count: 0 };
+  const lastWeek = weeklyLoad[weekKeys[weekKeys.length - 2]] || { distance: 0, elevation: 0, count: 0 };
+  const weekCard = el('div', { class: 'stat-card' });
+  weekCard.appendChild(el('div', { class: 'label' }, '本周跑量'));
+  weekCard.appendChild(el('div', { class: 'value' }, num(thisWeek.distance, 1)));
+  weekCard.appendChild(el('div', { class: 'unit' }, 'km'));
+  if (lastWeek.distance > 0) {
+    const diff = thisWeek.distance - lastWeek.distance;
+    const pct = Math.abs((diff / lastWeek.distance) * 100).toFixed(0);
+    const cls = diff > 0 ? 'change-up' : diff < 0 ? 'change-down' : 'change-same';
+    const txt = diff > 0 ? `⬆️ ${pct}%` : diff < 0 ? `⬇️ ${pct}%` : '➡️ 持平';
+    weekCard.appendChild(el('div', { class: 'change ' + cls }, txt));
+  }
+  grid.appendChild(weekCard);
+
+  section.appendChild(grid);
+
+  // 8 周距离历史柱状图
+  if (weekKeys.length >= 2) {
+    const bars = weekKeys.map((k) => ({
+      label: k.slice(5),
+      value: weeklyLoad[k].distance || 0,
+    }));
+    section.appendChild(barChartCard('近 8 周距离', bars, { color: '#22c55e' }));
+  } else {
+    section.appendChild(el('div', { class: 'empty' }, '需要至少 2 周活动记录以展示周历史'));
+  }
+
+  return section;
+}
+
+function computeWeeklyLoad(activities, weeks = 8) {
+  const weekly = {};
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - weeks * 7);
+
+  for (const a of activities) {
+    const date = String(a.date);
+    if (!date || date < start.toISOString().slice(0, 10)) continue;
+    const d = new Date(date + 'T00:00:00');
+    const day = d.getDay();
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    const key = monday.toISOString().slice(0, 10);
+    if (!weekly[key]) weekly[key] = { distance: 0, elevation: 0, duration: 0, count: 0 };
+    weekly[key].distance += Number(a.distance_km) || 0;
+    weekly[key].elevation += Number(a.elevation_gain_m) || 0;
+    weekly[key].duration += Number(a.duration_hours) || 0;
+    weekly[key].count += 1;
+  }
+  return weekly;
+}
+
+function computeACWR(weeklyLoad) {
+  const keys = Object.keys(weeklyLoad).sort();
+  if (keys.length < 2) return { ratio: 0, status: '数据不足', risk: 'unknown', acute: 0, chronic: 0 };
+
+  const acute = weeklyLoad[keys[keys.length - 1]].distance;
+  const chronicKeys = keys.slice(-5, -1);
+  const chronic = chronicKeys.length
+    ? chronicKeys.reduce((s, k) => s + weeklyLoad[k].distance, 0) / chronicKeys.length
+    : 0;
+
+  if (!chronic) return { ratio: 0, status: '数据不足', risk: 'unknown', acute, chronic: 0 };
+
+  const ratio = acute / chronic;
+  let status, risk;
+  if (ratio < 0.8) { status = '训练不足'; risk = 'low'; }
+  else if (ratio <= 1.3) { status = '最佳训练区'; risk = 'optimal'; }
+  else if (ratio <= 1.5) { status = '警告区（伤病风险增加）'; risk = 'warning'; }
+  else { status = '危险区（高伤病风险）'; risk = 'danger'; }
+
+  return { ratio, status, risk, acute, chronic };
+}
+
+function computeFatigueScore(bodyLogs) {
+  if (!bodyLogs || bodyLogs.length === 0) {
+    return { score: 0, status: '无数据', levelKey: 'unknown', avgFatigue: null, avgSoreness: null, avgSleep: null };
+  }
+
+  const sorted = bodyLogs
+    .filter((b) => b.date)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 7);
+
+  if (!sorted.length) {
+    return { score: 0, status: '无数据', levelKey: 'unknown', avgFatigue: null, avgSoreness: null, avgSleep: null };
+  }
+
+  const fatigues = sorted.map((b) => Number(b.fatigue)).filter((v) => !isNaN(v));
+  const soreness = sorted.map((b) => Number(b.muscle_soreness)).filter((v) => !isNaN(v));
+  const sleeps = sorted.map((b) => Number(b.sleep_hours)).filter((v) => !isNaN(v));
+
+  const avgFatigue = fatigues.length ? fatigues.reduce((s, v) => s + v, 0) / fatigues.length : 0;
+  const avgSoreness = soreness.length ? soreness.reduce((s, v) => s + v, 0) / soreness.length : 0;
+  const avgSleep = sleeps.length ? sleeps.reduce((s, v) => s + v, 0) / sleeps.length : 7;
+
+  let score = 0;
+  if (avgFatigue) score += Math.min(avgFatigue * 8, 60);
+  if (avgSoreness) score += Math.min(avgSoreness * 4, 30);
+  if (avgSleep < 6) score += Math.min((6 - avgSleep) * 5, 10);
+  score = Math.min(100, score);
+
+  let status, levelKey;
+  if (score < 30) { status = '状态良好'; levelKey = 'good'; }
+  else if (score < 50) { status = '轻度疲劳'; levelKey = 'mild'; }
+  else if (score < 70) { status = '中度疲劳'; levelKey = 'moderate'; }
+  else { status = '高度疲劳'; levelKey = 'high'; }
+
+  return { score, status, levelKey, avgFatigue, avgSoreness, avgSleep };
 }
 
 // ---------- Segment PB ----------
@@ -689,35 +992,60 @@ function computeSegmentPBs(segments, activities) {
     const records = [];
     for (const a of activities) {
       if (!matchSegmentActivity(seg, a)) continue;
-      records.push({ date: a.date, route: a.route, duration: Number(a.duration_hours) });
+      const distance = Number(a.distance_km) || 0;
+      const duration = Number(a.duration_hours) || 0;
+      records.push({
+        date: a.date,
+        route: a.route,
+        distance_km: distance,
+        duration_hours: duration,
+        pace_min_per_km: distance && duration ? (duration * 60) / distance : 0,
+        avg_hr: a.avg_hr,
+        felt: a.felt,
+        is_pb: false,
+      });
     }
     if (!records.length) continue;
-    records.sort((a, b) => a.duration - b.duration);
-    const best = records[0];
+
+    records.sort((a, b) => a.duration_hours - b.duration_hours);
+    const bestDuration = records[0].duration_hours;
+    for (const r of records) {
+      r.is_pb = r.duration_hours === bestDuration && r.duration_hours > 0;
+    }
+    records.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const best = records.find((r) => r.is_pb) || records[0];
 
     let trend = '—';
+    let trendKey = 'same';
     if (records.length >= 2) {
-      const recent = records.slice(0, 3);
-      const older = records.slice(3, 6);
+      const recent = records.slice(-3);
+      const older = records.slice(-6, -3);
       if (older.length) {
-        const recentAvg = recent.reduce((s, r) => s + r.duration, 0) / recent.length;
-        const olderAvg = older.reduce((s, r) => s + r.duration, 0) / older.length;
+        const recentAvg = recent.reduce((s, r) => s + r.duration_hours, 0) / recent.length;
+        const olderAvg = older.reduce((s, r) => s + r.duration_hours, 0) / older.length;
         const diff = olderAvg - recentAvg;
         const pct = olderAvg ? (Math.abs(diff) / olderAvg) * 100 : 0;
-        trend = diff > 0 ? `⬇️ ${pct.toFixed(1)}%` : `⬆️ ${pct.toFixed(1)}%`;
+        if (diff > 0) { trend = `📈 进步中 ${pct.toFixed(0)}%`; trendKey = 'up'; }
+        else if (diff < 0) { trend = `📉 有所退步 ${pct.toFixed(0)}%`; trendKey = 'down'; }
       } else {
-        const prev = records[1];
-        const diff = prev.duration - best.duration;
-        const pct = prev.duration ? (diff / prev.duration) * 100 : 0;
-        trend = diff > 0 ? `⬇️ ${pct.toFixed(1)}%` : `⬆️ ${Math.abs(pct).toFixed(1)}%`;
+        const prev = records[records.length - 2];
+        const last = records[records.length - 1];
+        const diff = prev.duration_hours - last.duration_hours;
+        const pct = prev.duration_hours ? (Math.abs(diff) / prev.duration_hours) * 100 : 0;
+        if (diff > 0) { trend = `📈 进步 ${pct.toFixed(0)}%`; trendKey = 'up'; }
+        else if (diff < 0) { trend = `📉 退步 ${pct.toFixed(0)}%`; trendKey = 'down'; }
       }
     }
+
     results.push({
       segmentName: segName || '未命名',
       route: best.route,
-      best: best.duration,
+      best: best.duration_hours,
+      distance_km: best.distance_km,
       date: best.date,
       trend,
+      trendKey,
+      records,
     });
   }
   return results.sort((a, b) => String(b.date).localeCompare(String(a.date)));

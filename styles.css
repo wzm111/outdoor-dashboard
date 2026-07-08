@@ -1930,6 +1930,7 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
   }
 }
 
+.usage-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1966,3 +1967,119 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 @media (max-width: 520px) {
   .usage-label { width: 90px; }
 }
+
+/* ---------- 报告中心增强 v1.3.0 ---------- */
+
+.reports-grid.three { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 720px) {
+  .reports-grid.three { grid-template-columns: 1fr; }
+}
+
+/* 训练状态 */
+.training-status-card { padding: 16px; }
+.training-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.training-status-emoji { font-size: 24px; }
+.training-status-text {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text);
+}
+.training-trend-text {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* ACWR */
+.acwr-card .value { font-size: 28px; }
+.acwr-risk-optimal { border-left: 4px solid #22c55e; }
+.acwr-risk-warning { border-left: 4px solid #f59e0b; }
+.acwr-risk-danger { border-left: 4px solid #ef4444; }
+.acwr-risk-low { border-left: 4px solid #3b82f6; }
+.acwr-risk-unknown { border-left: 4px solid var(--border); }
+
+/* 疲劳 */
+.fatigue-card .value { font-size: 28px; }
+.fatigue-score-good { border-left: 4px solid #22c55e; }
+.fatigue-score-mild { border-left: 4px solid #3b82f6; }
+.fatigue-score-moderate { border-left: 4px solid #f59e0b; }
+.fatigue-score-high { border-left: 4px solid #ef4444; }
+.fatigue-score-unknown { border-left: 4px solid var(--border); }
+
+/* TSS 明细表 */
+.tss-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.tss-table th,
+.tss-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.tss-table th { color: var(--text-dim); font-weight: 500; }
+.tss-badge {
+  display: inline-block;
+  min-width: 32px;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Segment PB */
+.segment-pb-block { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.segment-pb-block:last-child { border-bottom: none; }
+.segment-pb-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.segment-pb-name { font-weight: 600; color: var(--text); flex: 1; }
+.segment-pb-time { font-family: var(--font-mono, monospace); font-size: 15px; color: var(--accent); }
+.segment-pb-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.segment-trend { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-sm); }
+.segment-trend-up { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.segment-trend-down { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.segment-trend-same { background: var(--bg-elev); color: var(--text-dim); }
+.segment-mini-records { display: flex; flex-direction: column; gap: 4px; }
+.segment-mini-record {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.segment-mini-pb { color: #fbbf24; font-weight: 600; }
+
+/* Gear Health 磨损与维护记录 */
+.gear-wear-line { margin-top: 6px; }
+.gear-wear-progress {
+  height: 6px;
+  background: var(--bg-elev);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.gear-wear-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.gear-wear-fill.critical { background: #ef4444; }
+.gear-wear-fill.warn { background: #f59e0b; }
+.gear-wear-fill.good { background: #22c55e; }
+.maintenance-log {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.maintenance-log-title { font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.maintenance-log-item { padding: 2px 0; }
