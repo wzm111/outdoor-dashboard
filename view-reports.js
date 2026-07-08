@@ -120,7 +120,10 @@ function renderReports() {
     view.appendChild(el('div', { class: 'empty' }, '训练指标需要至少一条带距离或心率的活动记录'));
   }
 
-  // 4. 训练负荷（ACWR + 疲劳 + 周历史）
+  // 4. 身体年龄参考
+  view.appendChild(renderBodyAgeSection(profile, activities, bodyLogs));
+
+  // 5. 训练负荷（ACWR + 疲劳 + 周历史）
   const loadSection = renderTrainingLoad(activities, bodyLogs, today);
   view.appendChild(loadSection);
 
@@ -802,6 +805,47 @@ function computeTrainingMetrics(activities, profile) {
   }
 
   return { series, latest, status, ctlTrend, weeklySummary, activityDetails };
+}
+
+// ---------- 身体年龄 ----------
+
+function renderBodyAgeSection(profile, activities, bodyLogs) {
+  const section = el('div', { class: 'report-card body-age-section' });
+  section.appendChild(el('h3', {}, '身体年龄参考'));
+
+  const result = computeBodyAge(profile, activities, bodyLogs || []);
+  if (!result || result.body_age == null) {
+    section.appendChild(el('div', { class: 'empty' }, '需要体能档案中的年龄才能估算身体年龄'));
+    return section;
+  }
+
+  const delta = result.delta;
+  const deltaClass = delta < 0 ? 'positive' : delta > 0 ? 'negative' : '';
+  const deltaText = delta === 0 ? '与实际年龄一致' : delta < 0 ? `比实际年轻 ${Math.abs(delta)} 岁` : `比实际增加 ${delta} 岁`;
+  const confidenceText = { high: '高', medium: '中', low: '估算中' }[result.confidence] || result.confidence;
+
+  const card = el('div', { class: 'body-age-report-card' },
+    el('div', { class: 'body-age-report-main' },
+      el('div', { class: 'body-age-report-number' },
+        String(result.body_age),
+        el('span', { class: 'body-age-report-unit' }, ' 岁')
+      ),
+      el('div', { class: `body-age-report-delta ${deltaClass}` }, deltaText)
+    ),
+    el('div', { class: 'body-age-report-meta' },
+      el('div', {}, `实际年龄 ${result.chronological_age} 岁 · 置信度 ${confidenceText}`),
+      el('div', { class: 'body-age-report-explanation' }, result.explanation)
+    )
+  );
+  card.addEventListener('click', () => openBodyAgeDetail(result));
+
+  section.appendChild(card);
+  section.appendChild(
+    el('div', { class: 'report-hint' },
+      '基于心肺功能、训练负荷、恢复状态与 BMI 的参考估算，点击卡片查看详细分解。'
+    )
+  );
+  return section;
 }
 
 // ---------- 训练负荷（ACWR + 疲劳 + 周历史） ----------

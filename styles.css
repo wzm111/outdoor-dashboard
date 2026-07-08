@@ -1296,6 +1296,37 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 .body-age-detail-table th { color: var(--text-dim); font-weight: 500; }
 .body-age-detail-missing ul { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 13px; }
 .body-age-detail-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-dim); }
+
+/* 报告中心身体年龄 */
+.body-age-report-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.body-age-report-card:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+.body-age-report-main { display: flex; flex-direction: column; }
+.body-age-report-number {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+.body-age-report-unit { font-size: 16px; font-weight: 500; color: var(--text-dim); margin-left: 4px; }
+.body-age-report-delta { font-size: 14px; margin-top: 6px; }
+.body-age-report-delta.positive { color: #86efac; }
+.body-age-report-delta.negative { color: #fca5a5; }
+.body-age-report-meta { text-align: right; font-size: 13px; color: var(--text-dim); max-width: 60%; }
+.body-age-report-explanation { margin-top: 6px; line-height: 1.5; }
+
 .segment-table {
   width: 100%;
   border-collapse: collapse;
