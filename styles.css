@@ -1342,6 +1342,13 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 .activity-detail-issue { background: rgba(239, 68, 68, 0.1); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
 .activity-detail-gear-list { margin-bottom: 8px; }
 .activity-detail-gear-total { font-size: 12px; color: var(--text-dim); text-align: right; }
+.activity-detail-gpx-section { margin-bottom: 8px; }
+.activity-detail-gpx-panel .empty {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .segment-table {
   width: 100%;

@@ -232,6 +232,52 @@ function feltStars(felt) {
   return el('span', { class: 'stars', title: felt }, filled + empty);
 }
 
+/** 在活动详情弹窗中渲染 GPX 海拔剖面。优先使用活动自身 gpx_file，否则回退到同名路线。 */
+async function renderActivityGpxSection(activity, container) {
+  container.innerHTML = '';
+  let url = activity.gpx_file || activity.data?.gpx_file || '';
+  let sourceLabel = '活动 GPX';
+  if (!url && activity.route) {
+    const routeName = String(activity.route || '').trim();
+    const route = (state.data.routes || []).find((r) =>
+      r.name === routeName || (r.slug || r.name) === routeName
+    );
+    if (route && route.gpx_file) {
+      url = route.gpx_file;
+      sourceLabel = '路线 GPX';
+    }
+  }
+  url = String(url || '').trim();
+  if (!url || !url.startsWith('http')) return;
+
+  container.appendChild(el('div', { class: 'activity-detail-section-title' }, `海拔剖面（${sourceLabel}）`));
+  const panel = el('div', { class: 'activity-detail-gpx-panel' });
+  panel.appendChild(el('div', { class: 'skeleton skeleton-route-chart' }));
+  container.appendChild(panel);
+
+  try {
+    const res = await fetchGpxWithCache(url);
+    if (!res.ok) {
+      panel.innerHTML = '';
+      panel.appendChild(el('div', { class: 'empty' }, `无法加载 GPX：${res.error || '未知错误'}`));
+      return;
+    }
+    const points = parseGpxXml(res.text);
+    if (!points.length) {
+      panel.innerHTML = '';
+      panel.appendChild(el('div', { class: 'empty' }, 'GPX 中未找到轨迹点'));
+      return;
+    }
+    const simple = simplifyGpxPoints(points, 800);
+    const stats = computeGpxStats(points);
+    panel.innerHTML = '';
+    panel.appendChild(elevationProfileCard('轨迹海拔剖面', simple, { stats, height: 200 }));
+  } catch (err) {
+    panel.innerHTML = '';
+    panel.appendChild(el('div', { class: 'empty' }, `GPX 解析失败：${err.message || '未知错误'}`));
+  }
+}
+
 /** 打开活动详情弹窗：展示运动类型专属统计、备注/天气/不适、装备列表与操作入口。 */
 function openActivityDetail(activity, gearMap) {
   const map = gearMap || new Map((state.data.gear || []).map((g) => [g.slug, g]));
@@ -356,6 +402,11 @@ function openActivityDetail(activity, gearMap) {
       );
     }
   }
+
+  // 海拔剖面
+  const gpxSection = el('div', { class: 'activity-detail-gpx-section' });
+  wrap.appendChild(gpxSection);
+  renderActivityGpxSection(activity, gpxSection);
 
   const editBtn = el('button', { class: 'btn btn-primary' }, '编辑');
   const gearBtn = el('button', { class: 'btn' }, '管理装备');
