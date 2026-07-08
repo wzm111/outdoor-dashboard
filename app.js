@@ -361,7 +361,7 @@ function init() {
     }
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeBottomMore();
+    if (e.key === 'Escape' && !$('.modal-overlay')) closeBottomMore();
   });
 
   // 浏览器前进/后退时根据 hash 切换视图

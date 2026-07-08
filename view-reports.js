@@ -97,6 +97,7 @@ function renderReports() {
     if (metrics.activityDetails && metrics.activityDetails.length) {
       const tssSection = el('div', { class: 'report-card' });
       tssSection.appendChild(el('h3', {}, '近期活动 TSS 明细'));
+      const tableWrap = el('div', { class: 'table-wrap' });
       const table = el('table', { class: 'tss-table' });
       table.innerHTML = `<thead><tr><th>日期</th><th>路线</th><th>类型</th><th>距离</th><th>时长</th><th>心率</th><th>TSS</th><th>感受</th></tr></thead>`;
       const tbody = el('tbody');
@@ -113,7 +114,9 @@ function renderReports() {
         tbody.appendChild(tr);
       }
       table.appendChild(tbody);
-      tssSection.appendChild(table);
+      labelTableCells(table, ['日期', '路线', '类型', '距离', '时长', '心率', 'TSS', '感受']);
+      tableWrap.appendChild(table);
+      tssSection.appendChild(tableWrap);
       view.appendChild(tssSection);
     }
   } else {

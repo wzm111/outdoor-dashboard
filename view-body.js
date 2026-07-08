@@ -217,7 +217,7 @@ function renderBody() {
       el('td', {}, log.mood != null ? num(log.mood, 0) : '—'),
       el('td', {}, log.weight_kg != null ? num(log.weight_kg, 1) : '—'),
       el('td', {}, log.notes || '—'),
-      el('td', {},
+      el('td', { class: 'actions' },
         el('button', { class: 'btn-sm', 'data-action': 'edit', style: 'margin-right:6px;' }, '编辑'),
         el('button', { class: 'btn-sm btn-danger', 'data-action': 'delete' }, '删除')
       )
@@ -236,6 +236,7 @@ function renderBody() {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
+  labelTableCells(table, ['日期', '睡眠', '疲劳', '酸痛', '膝盖', '心情', '体重', '备注', '操作']);
   tableWrap.appendChild(table);
   view.appendChild(tableWrap);
 }

@@ -215,7 +215,7 @@ function renderRoutes() {
       el('td', { class: 'num' }, num(r.elevation_gain_m, 0) + ' m'),
       el('td', {}, diff ? el('span', { class: 'badge ' + cls }, diff) : '—'),
       el('td', { class: 'num' }, r.estimated_hours != null ? num(r.estimated_hours) + ' h' : '—'),
-      el('td', {},
+      el('td', { class: 'actions' },
         el('button', { class: 'btn-sm', 'data-action': 'detail', style: 'margin-right:6px;' }, '详情'),
         el('button', { class: 'btn-sm', 'data-action': 'edit', style: 'margin-right:6px;' }, '编辑'),
         el('button', { class: 'btn-sm btn-primary', 'data-action': 'recommend', style: 'margin-right:6px;' }, '推荐'),
@@ -242,6 +242,7 @@ function renderRoutes() {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
+  labelTableCells(table, ['名称', '地点', '距离', '爬升', '难度', '预计时长', '操作']);
   wrap.appendChild(table);
   view.appendChild(wrap);
 }

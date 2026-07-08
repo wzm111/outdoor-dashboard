@@ -218,6 +218,7 @@ function activityTable(acts, sport) {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
+  labelTableCells(table, [...cfg.headers, '操作']);
   wrap.appendChild(table);
   return wrap;
 }

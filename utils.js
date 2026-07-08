@@ -78,10 +78,31 @@ function parseSpecText(text) {
   return out;
 }
 
+let modalOpenCount = 0;
+let savedModalScrollY = 0;
+
+/** 给表格每个 <td> 注入 data-label，供移动端 CSS 卡片化显示。 */
+function labelTableCells(table, headers) {
+  const rows = table.querySelectorAll('tbody tr');
+  for (const row of rows) {
+    const cells = row.querySelectorAll('td');
+    for (let i = 0; i < cells.length; i++) {
+      cells[i].dataset.label = headers[i] || '操作';
+    }
+  }
+}
+
 /** 创建并显示一个模态弹窗。返回关闭函数。
  *  @param onClose 可选；弹窗关闭（含点击遮罩/×/非 data-no-autoclose 按钮）后调用。
  *  @param boxClass 可选；追加到 .modal-box 的额外 CSS 类。 */
 function showModal(title, contentNode, buttons = [], onClose = null, boxClass = '') {
+  if (modalOpenCount === 0) {
+    savedModalScrollY = window.scrollY;
+    document.body.style.setProperty('--modal-scroll-top', `-${savedModalScrollY}px`);
+    document.body.classList.add('modal-open');
+  }
+  modalOpenCount++;
+
   const overlay = el('div', { class: 'modal-overlay' });
   const box = el('div', { class: 'modal-box' + (boxClass ? ' ' + boxClass : '') });
   const header = el('div', { class: 'modal-header' },
@@ -98,10 +119,47 @@ function showModal(title, contentNode, buttons = [], onClose = null, boxClass = 
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
+  function onKey(e) {
+    if (e.key === 'Escape') {
+      const all = $$('.modal-overlay');
+      if (all[all.length - 1] === overlay) close();
+    }
+  }
+
+  function onResize() {
+    if (!window.visualViewport) return;
+    const h = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+    document.documentElement.style.setProperty('--keyboard-height', `${h}px`);
+  }
+
+  function onFocus(e) {
+    const target = e.target;
+    if (!target || !/^(INPUT|TEXTAREA|SELECT)$/i.test(target.tagName)) return;
+    setTimeout(() => {
+      const boxRect = box.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (targetRect.bottom > boxRect.bottom - 24) {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }, 300);
+  }
+
   const close = () => {
+    document.removeEventListener('keydown', onKey);
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', onResize);
+    body.removeEventListener('focusin', onFocus);
     overlay.remove();
+    modalOpenCount--;
+    if (modalOpenCount <= 0) {
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('--modal-scroll-top');
+      if (savedModalScrollY) window.scrollTo(0, savedModalScrollY);
+      modalOpenCount = 0;
+      savedModalScrollY = 0;
+    }
     if (typeof onClose === 'function') onClose();
   };
+
   const closeBtn = $('.modal-close', overlay);
   if (closeBtn) closeBtn.addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -112,6 +170,13 @@ function showModal(title, contentNode, buttons = [], onClose = null, boxClass = 
     if (b.getAttribute && b.getAttribute('data-no-autoclose') != null) continue;
     b.addEventListener('click', close);
   }
+
+  document.addEventListener('keydown', onKey);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onResize);
+    onResize();
+  }
+  body.addEventListener('focusin', onFocus);
 
   return close;
 }
