@@ -292,6 +292,21 @@ function openActivityDetail(activity, gearMap) {
   ].filter(Boolean);
   wrap.appendChild(el('div', { class: 'activity-detail-meta' }, metaItems.join(' · ')));
 
+  // 路线快捷入口
+  if (activity.route) {
+    const routeName = String(activity.route).trim();
+    const route = (state.data.routes || []).find((r) =>
+      r.name === routeName || (r.slug || r.name) === routeName
+    );
+    if (route) {
+      const actions = el('div', { class: 'activity-detail-actions' });
+      const routeBtn = el('button', { class: 'btn-sm btn-primary' }, '查看路线详情');
+      routeBtn.addEventListener('click', () => openRouteDetail(route));
+      actions.appendChild(routeBtn);
+      wrap.appendChild(actions);
+    }
+  }
+
   // 统计网格（按运动类型展示关键字段）
   const stats = [];
   const addStat = (label, value) => {

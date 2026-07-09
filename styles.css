@@ -1332,6 +1332,7 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 /* 活动详情弹窗 */
 .activity-detail { font-size: 14px; }
 .activity-detail-meta { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+.activity-detail-actions { margin-bottom: 12px; }
 .activity-detail-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .activity-detail-stat { background: var(--bg-elev); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px; text-align: center; }
 .activity-detail-stat-value { font-size: 16px; font-weight: 700; color: var(--text); }
@@ -1830,6 +1831,12 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
 .route-detail-activity-list .rel-item.route-activity-best {
   border-color: var(--accent);
   background: rgba(34, 197, 94, 0.08);
+}
+.route-detail-activity-list .rel-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.route-detail-activity-list .rel-item.route-activity-best:hover {
+  background: rgba(34, 197, 94, 0.14);
 }
 
 .skeleton-route-chart {

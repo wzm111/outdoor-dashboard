@@ -474,17 +474,20 @@ function routeDetailActivities(r, acts) {
     section.appendChild(statRow);
   }
 
+  const gearMap = new Map((state.data.gear || []).map((g) => [g.slug, g]));
   const list = el('div', { class: 'rel-list route-detail-activity-list' });
   for (const a of acts) {
-    list.appendChild(routeActivityRow(a, stats && stats.bestTime));
+    list.appendChild(routeActivityRow(a, stats && stats.bestTime, gearMap));
   }
   section.appendChild(list);
   return section;
 }
 
-function routeActivityRow(a, bestDuration) {
+function routeActivityRow(a, bestDuration, gearMap) {
   const isBest = bestDuration != null && Number(a.duration_hours) === bestDuration;
   const item = el('div', { class: 'rel-item' + (isBest ? ' route-activity-best' : '') });
+  item.style.cursor = 'pointer';
+  item.title = '点击打开活动详情';
   const info = el('div', { class: 'rel-info' });
   info.appendChild(el('div', { class: 'rel-name' }, `${fmtDate(a.date)} · ${a.route || '活动'}`));
   const parts = [
@@ -500,6 +503,7 @@ function routeActivityRow(a, bestDuration) {
   if (isBest) {
     item.appendChild(el('span', { class: 'badge easy' }, '最快'));
   }
+  item.addEventListener('click', () => openActivityDetail(a, gearMap));
   return item;
 }
 
