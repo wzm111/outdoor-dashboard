@@ -6,6 +6,55 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+// ---------- 身体不适标签中文映射（保留原始英文 key 用于存储，仅展示时翻译） ----------
+
+const ISSUE_LABEL_MAP = {
+  knee: '膝盖',
+  knee_sore_downhill: '下坡膝盖疼',
+  knee_left: '左膝',
+  knee_right: '右膝',
+  it_band: '髂胫束',
+  it_band_left: '左侧髂胫束',
+  it_band_right: '右侧髂胫束',
+  ankle: '脚踝',
+  ankle_left: '左脚踝',
+  ankle_right: '右脚踝',
+  blisters: '水泡',
+  blisters_left_foot: '左脚水泡',
+  blisters_right_foot: '右脚水泡',
+  chafing: '摩擦伤',
+  sunburn: '晒伤',
+  headache: '头痛',
+  stomach: '肠胃不适',
+  fatigue: '疲劳',
+  muscle_soreness: '肌肉酸痛',
+  back: '腰背',
+  hip: '髋部',
+  shoulder: '肩膀',
+  foot: '脚',
+  heel: '脚跟',
+  arch: '足弓',
+  toe: '脚趾',
+  shin: '胫骨痛',
+  shin_splints: '胫骨应力综合征',
+  calf: '小腿',
+  achilles: '跟腱',
+  cramp: '抽筋',
+  dehydration: '脱水',
+  altitude: '高反',
+  cold: '受寒',
+  heat: '中暑',
+  wind: '受风',
+  plantar_fasciitis: '足底筋膜炎',
+  neck: '颈部',
+  other: '其他',
+};
+
+function issueLabel(raw) {
+  if (!raw) return '—';
+  return ISSUE_LABEL_MAP[String(raw).toLowerCase()] || raw;
+}
+
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {

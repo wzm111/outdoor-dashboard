@@ -366,7 +366,7 @@ function openActivityDetail(activity, gearMap) {
     wrap.appendChild(el('div', { class: 'activity-detail-section-title' }, '身体不适'));
     wrap.appendChild(
       el('div', { class: 'activity-detail-issues' },
-        ...issues.map((i) => el('span', { class: 'activity-detail-issue' }, i))
+        ...issues.map((i) => el('span', { class: 'activity-detail-issue', title: i }, issueLabel(i)))
       )
     );
   }

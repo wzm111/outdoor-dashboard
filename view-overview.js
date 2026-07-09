@@ -14,12 +14,7 @@ function toleranceText(tol, type) {
 }
 
 function issueText(issue) {
-  const map = {
-    knee: '膝盖不适', knee_sore_downhill: '下坡膝痛', it_band: '髂胫束', blisters: '水泡',
-    ankle: '脚踝', shin: '胫骨痛', calf: '小腿', hip: '髋部', back: '腰背',
-    shoulder: '肩部', neck: '颈部', foot: '足底', plantar_fasciitis: '足底筋膜炎', achilles: '跟腱',
-  };
-  return map[issue] || issue;
+  return issueLabel(issue);
 }
 
 function recentConditionText(cond) {

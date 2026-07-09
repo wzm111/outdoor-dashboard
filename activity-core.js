@@ -125,7 +125,7 @@ function renderActivityAiResult(container, parsed, provider) {
     ['平均功率', parsed.power_avg_w != null ? parsed.power_avg_w + ' W' : null],
     ['感受', parsed.felt],
     ['装备', Array.isArray(parsed.gear_used) ? parsed.gear_used.join('、') : parsed.gear_used],
-    ['问题', Array.isArray(parsed.issues) ? parsed.issues.join('、') : parsed.issues],
+    ['问题', Array.isArray(parsed.issues) ? parsed.issues.map(issueLabel).join('、') : parsed.issues],
     ['备注', parsed.notes],
   ].filter(([, v]) => v != null && v !== '' && v !== '—');
   const list = el('ul', { class: 'detail-list' });
