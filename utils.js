@@ -13,12 +13,14 @@ const ISSUE_LABEL_MAP = {
   knee_sore_downhill: '下坡膝盖疼',
   knee_left: '左膝',
   knee_right: '右膝',
+  knee_mild_swelling: '膝盖轻微肿胀',
   it_band: '髂胫束',
   it_band_left: '左侧髂胫束',
   it_band_right: '右侧髂胫束',
   ankle: '脚踝',
   ankle_left: '左脚踝',
   ankle_right: '右脚踝',
+  ankle_minor_rollover: '脚踝轻微扭伤',
   blisters: '水泡',
   blisters_left_foot: '左脚水泡',
   blisters_right_foot: '右脚水泡',
@@ -52,7 +54,10 @@ const ISSUE_LABEL_MAP = {
 
 function issueLabel(raw) {
   if (!raw) return '—';
-  return ISSUE_LABEL_MAP[String(raw).toLowerCase()] || raw;
+  const key = String(raw).toLowerCase();
+  if (ISSUE_LABEL_MAP[key]) return ISSUE_LABEL_MAP[key];
+  // 兜底：下划线变空格 + 首字母大写，避免直接显示字段名
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function el(tag, attrs = {}, ...children) {
