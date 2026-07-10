@@ -264,6 +264,8 @@ function elevationProfileCard(title, points, opts = {}) {
   const canvasWrap = el('div', { class: 'elevation-profile-wrap' });
   const canvas = el('canvas', { class: 'elevation-profile-canvas' });
   canvasWrap.appendChild(canvas);
+  const tooltip = el('div', { class: 'elevation-profile-tooltip' });
+  canvasWrap.appendChild(tooltip);
   card.appendChild(canvasWrap);
 
   const stats = opts.stats || (() => {
@@ -297,7 +299,10 @@ function elevationProfileCard(title, points, opts = {}) {
   statRow.appendChild(stat('最低', num(stats.minEleM, 0), 'm'));
   card.appendChild(statRow);
 
-  requestAnimationFrame(() => drawElevationProfile(canvas, points, opts));
+  requestAnimationFrame(() => {
+    drawElevationProfile(canvas, points, opts);
+    attachElevationHover(canvas, points, tooltip, opts);
+  });
   return card;
 }
 
@@ -417,4 +422,106 @@ function drawElevationProfile(canvas, points, opts = {}) {
     ctx.fill();
   }
   ctx.textAlign = 'start';
+
+  // 交互高亮：垂直参考线与当前点
+  const hi = opts.highlightIndex;
+  if (hi != null && hi >= 0 && hi < points.length) {
+    const px = x(distances[hi]);
+    const py = y(elevations[hi]);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px, padT);
+    ctx.lineTo(px, padT + h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(px, py, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ---------- 海拔剖面交互提示 ----------
+
+function attachElevationHover(canvas, points, tooltip, opts) {
+  const wrap = canvas.parentElement;
+  if (!wrap) return;
+
+  const padL = 46, padR = 16;
+  const distances = points.map((p) => p.distanceKm || 0);
+  const maxD = Math.max(...distances);
+
+  function findIndex(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    const cssW = rect.width;
+    const w = cssW - padL - padR;
+    const xRel = clientX - rect.left - padL;
+    const ratio = maxD && w > 0 ? Math.max(0, Math.min(1, xRel / w)) : 0;
+    const targetD = ratio * maxD;
+    let idx = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const diff = Math.abs((points[i].distanceKm || 0) - targetD);
+      if (diff < minDiff) { minDiff = diff; idx = i; }
+    }
+    return idx;
+  }
+
+  function cumulativeGainTo(idx) {
+    let gain = 0;
+    for (let i = 1; i <= idx; i++) {
+      const diff = points[i].ele - points[i - 1].ele;
+      if (diff > 0) gain += diff;
+    }
+    return gain;
+  }
+
+  function showAt(clientX, clientY) {
+    const idx = findIndex(clientX);
+    const p = points[idx];
+    if (!p) return;
+    const gain = cumulativeGainTo(idx);
+    tooltip.innerHTML = [
+      '<div>距离 ' + num(p.distanceKm, 1) + ' km</div>',
+      '<div>海拔 ' + Math.round(p.ele) + ' m</div>',
+      '<div>累计爬升 ' + Math.round(gain) + ' m</div>',
+    ].join('');
+    tooltip.style.display = 'block';
+
+    const wrapRect = wrap.getBoundingClientRect();
+    let left = clientX - wrapRect.left;
+    let top = clientY - wrapRect.top - tooltip.offsetHeight - 8;
+    if (left < tooltip.offsetWidth / 2) left = tooltip.offsetWidth / 2;
+    if (left > wrapRect.width - tooltip.offsetWidth / 2) left = wrapRect.width - tooltip.offsetWidth / 2;
+    if (top < 0) top = clientY - wrapRect.top + 12;
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+
+    drawElevationProfile(canvas, points, { ...opts, highlightIndex: idx });
+  }
+
+  function hide() {
+    tooltip.style.display = 'none';
+    drawElevationProfile(canvas, points, opts);
+  }
+
+  wrap.addEventListener('mousemove', (e) => showAt(e.clientX, e.clientY));
+  wrap.addEventListener('mouseleave', hide);
+  wrap.addEventListener('touchstart', (e) => {
+    if (e.touches.length) showAt(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  wrap.addEventListener('touchmove', (e) => {
+    if (e.touches.length) {
+      e.preventDefault();
+      showAt(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: false });
+  wrap.addEventListener('touchend', hide);
 }
