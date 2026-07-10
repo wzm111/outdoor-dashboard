@@ -102,7 +102,47 @@ function registerBackgroundSync() {
     .catch(() => {});
 }
 
-/** 刷新顶部离线/同步状态条。 */
+/** 解析队列项对应的实体类型、业务主键与操作语义，用于 UI 展示与压缩。 */
+function mutationMeta(item) {
+  try {
+    const url = new URL(item.url);
+    const parts = url.pathname.replace('/api/', '').split('/').filter(Boolean);
+    const entity = parts[0] || 'unknown';
+    const id = parts[1] ? decodeURIComponent(parts[1]) : '';
+    const method = String(item.method || '').toUpperCase();
+    const op = method === 'POST' ? '新增' : method === 'PUT' ? '编辑' : method === 'DELETE' ? '删除' : method;
+    return { entity, id, op, method };
+  } catch {
+    return { entity: 'unknown', id: item.url || '', op: item.method || '操作', method: item.method || '' };
+  }
+}
+
+/** 把实体名映射为中文标签。 */
+function entityLabel(entity) {
+  return {
+    gear: '装备', routes: '路线', activities: '活动', body: '身体', plans: '计划',
+    segments: '路段', price: '价格',
+  }[String(entity).toLowerCase()] || entity;
+}
+
+/** 从队列项 body 中尽量提取可读的名称/日期摘要。 */
+function mutationSummary(item) {
+  try {
+    const body = item.body ? JSON.parse(item.body) : {};
+    const data = body.data || body;
+    if (data.name) return data.name;
+    if (data.route && data.date) return `${data.date} · ${data.route}`;
+    if (data.date) return String(data.date);
+    if (data.route) return String(data.route);
+    if (data.slug) return String(data.slug);
+    if (data.plan_type) return `${data.plan_type} · ${data.date || ''}`;
+    return item.id.slice(0, 8);
+  } catch {
+    return item.id.slice(0, 8);
+  }
+}
+
+/** 刷新顶部离线/同步状态条，并同步「同步状态」按钮徽标。 */
 function updateOfflineBanner() {
   let banner = $('#offline-banner');
   if (!banner) {
@@ -113,6 +153,9 @@ function updateOfflineBanner() {
   const age = offlineState.cachedAt
     ? Math.max(0, Math.round((Date.now() - new Date(offlineState.cachedAt).getTime()) / 60000))
     : null;
+
+  // 顶部工具栏按钮徽标
+  updateSyncBadge(offlineState.pendingCount);
 
   if (offlineState.isOnline && offlineState.pendingCount === 0) {
     banner.hidden = true;
@@ -132,8 +175,179 @@ function updateOfflineBanner() {
   if (offlineState.pendingCount > 0) {
     banner.hidden = false;
     banner.className = 'offline-banner syncing';
-    banner.textContent = `正在同步 ${offlineState.pendingCount} 条修改…`;
+    banner.textContent = offlineState.flushing
+      ? `正在同步 ${offlineState.pendingCount} 条修改…`
+      : `${offlineState.pendingCount} 条修改待同步`;
   }
+}
+
+/** 更新同步状态按钮上的徽标。 */
+function updateSyncBadge(count) {
+  const btn = $('#sync-detail-btn');
+  if (!btn) return;
+  const existing = $('.sync-badge', btn);
+  if (existing) existing.remove();
+  if (count > 0) {
+    const badge = el('span', { class: 'sync-badge' }, String(count));
+    btn.appendChild(badge);
+  }
+  btn.classList.toggle('has-pending', count > 0);
+}
+
+/** 打开同步状态详情弹窗：展示连接状态、缓存时间、队列列表与操作。 */
+async function openSyncDetail() {
+  const queue = await idbGetAll();
+  const meta = loadSyncMeta();
+  const cachedAt = offlineState.cachedAt || (meta && meta.cachedAt);
+
+  const wrap = el('div', { class: 'sync-detail' });
+
+  // 状态摘要
+  const statusCard = el('div', { class: 'chart-card sync-status-card' });
+  const onlineRow = el('div', { class: 'sync-status-row' },
+    el('span', { class: 'sync-status-label' }, '网络状态'),
+    el('span', { class: 'sync-status-value ' + (offlineState.isOnline ? 'sync-online' : 'sync-offline') },
+      offlineState.isOnline ? '在线' : '离线')
+  );
+  const pendingRow = el('div', { class: 'sync-status-row' },
+    el('span', { class: 'sync-status-label' }, '待同步'),
+    el('span', { class: 'sync-status-value' }, `${queue.length} 条`)
+  );
+  const cachedRow = el('div', { class: 'sync-status-row' },
+    el('span', { class: 'sync-status-label' }, '本地快照'),
+    el('span', { class: 'sync-status-value' },
+      cachedAt ? `${Math.max(0, Math.round((Date.now() - new Date(cachedAt).getTime()) / 60000))} 分钟前` : '无')
+  );
+  statusCard.appendChild(onlineRow);
+  statusCard.appendChild(pendingRow);
+  statusCard.appendChild(cachedRow);
+  wrap.appendChild(statusCard);
+
+  // 操作按钮
+  const actionRow = el('div', { class: 'sync-detail-actions' });
+  const flushBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '立即同步');
+  flushBtn.disabled = !offlineState.isOnline || queue.length === 0 || offlineState.flushing;
+  flushBtn.addEventListener('click', async () => {
+    if (!navigator.onLine) { toast('当前离线，恢复网络后将自动同步', 'warn'); return; }
+    flushBtn.disabled = true;
+    flushBtn.textContent = '同步中…';
+    try {
+      await flushQueue();
+      close();
+      toast('同步完成', 'success');
+    } catch (err) {
+      toast(err.message || '同步失败', 'error');
+    }
+  });
+  const compressBtn = el('button', { class: 'btn', 'data-no-autoclose': '1' }, '压缩队列');
+  compressBtn.disabled = queue.length < 2 || offlineState.flushing;
+  compressBtn.addEventListener('click', async () => {
+    compressBtn.disabled = true;
+    compressBtn.textContent = '压缩中…';
+    await compressQueue();
+    close();
+    openSyncDetail();
+    toast('队列已压缩', 'info');
+  });
+  actionRow.appendChild(flushBtn);
+  actionRow.appendChild(compressBtn);
+  wrap.appendChild(actionRow);
+
+  // 队列列表
+  wrap.appendChild(el('div', { class: 'section-title rel-heading' }, `变更队列（${queue.length}）`));
+  if (!queue.length) {
+    wrap.appendChild(el('div', { class: 'empty' }, '没有待同步的修改'));
+  } else {
+    const sorted = [...queue].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const list = el('div', { class: 'rel-list sync-queue-list' });
+    for (const item of sorted) {
+      const meta = mutationMeta(item);
+      const summary = mutationSummary(item);
+      const isConflict = (item.attempts || 0) > 0 && item.lastError && /Conflict|409/i.test(item.lastError);
+      const isError = !isConflict && item.lastError;
+      const itemEl = el('div', { class: 'rel-item sync-queue-item' + (isConflict ? ' sync-conflict' : isError ? ' sync-error' : '') });
+      const info = el('div', { class: 'rel-info' });
+      const top = el('div', { class: 'rel-name' },
+        el('span', { class: 'sync-queue-op' }, meta.op),
+        ' · ',
+        el('span', { class: 'sync-queue-entity' }, entityLabel(meta.entity)),
+        ' · ',
+        el('span', { class: 'sync-queue-id' }, summary)
+      );
+      info.appendChild(top);
+      const bottom = el('div', { class: 'rel-brief sync-queue-meta' },
+        `创建于 ${new Date(item.createdAt).toLocaleString('zh-CN', { hour12: false })}`
+      );
+      if (item.attempts) {
+        bottom.appendChild(document.createTextNode(` · 已尝试 ${item.attempts} 次`));
+      }
+      if (isConflict) {
+        bottom.appendChild(document.createTextNode(' · 冲突'));
+      } else if (isError) {
+        bottom.appendChild(document.createTextNode(' · 失败'));
+      }
+      info.appendChild(bottom);
+      if (item.lastError) {
+        info.appendChild(el('div', { class: 'sync-queue-error' }, item.lastError));
+      }
+      itemEl.appendChild(info);
+
+      const actions = el('div', { class: 'sync-queue-actions' });
+      if (isConflict || isError) {
+        const retryBtn = el('button', { class: 'btn-sm', title: '立即重试' }, '重试');
+        retryBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          retryBtn.disabled = true;
+          retryBtn.textContent = '…';
+          try {
+            if (!navigator.onLine) throw new Error('当前离线');
+            const res = await fetchWithTimeout(item.url, {
+              method: item.method,
+              headers: item.headers,
+              body: item.body,
+            }, 30000, '重试同步');
+            if (res.status === 409) {
+              const body = await res.json().catch(() => ({}));
+              item.attempts = (item.attempts || 0) + 1;
+              item.lastError = `Conflict: server updated_at=${body.server_updated_at || 'unknown'}`;
+              await idbPut(item);
+              throw new Error('与服务端数据冲突');
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            await idbDelete(item.id);
+            offlineState.pendingCount = (await idbGetAll()).length;
+            updateOfflineBanner();
+            close();
+            openSyncDetail();
+            toast('已同步', 'success');
+          } catch (err) {
+            toast(err.message || '重试失败', 'error');
+            retryBtn.disabled = false;
+            retryBtn.textContent = '重试';
+          }
+        });
+        actions.appendChild(retryBtn);
+      }
+      const dropBtn = el('button', { class: 'btn-sm btn-danger-outline', title: '丢弃此条修改' }, '丢弃');
+      dropBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('确定丢弃这条本地修改吗？丢弃后无法恢复。')) return;
+        await idbDelete(item.id);
+        offlineState.pendingCount = (await idbGetAll()).length;
+        updateOfflineBanner();
+        close();
+        openSyncDetail();
+        toast('已丢弃', 'info');
+      });
+      actions.appendChild(dropBtn);
+      itemEl.appendChild(actions);
+      list.appendChild(itemEl);
+    }
+    wrap.appendChild(list);
+  }
+
+  const closeBtn = el('button', { class: 'btn' }, '关闭');
+  const close = showModal('同步状态', wrap, [closeBtn]);
 }
 
 /** 解析队列项对应的实体类型与业务主键，用于压缩与冲突提示。

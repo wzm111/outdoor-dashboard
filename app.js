@@ -372,6 +372,8 @@ function init() {
 
   $('#refresh-btn').addEventListener('click', () => loadAndRender(true));
 
+  $('#sync-detail-btn').addEventListener('click', openSyncDetail);
+
   $('#logout-btn').addEventListener('click', () => {
     clearConfig();
     state.token = null;
