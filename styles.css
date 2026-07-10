@@ -1861,11 +1861,15 @@ body:has(.offline-banner:not([hidden])) .app { padding-top: 36px; }
   border-color: var(--accent);
   background: rgba(34, 197, 94, 0.08);
 }
-.route-detail-activity-list .rel-item:hover {
+.route-detail-activity-list .rel-item:hover,
+.gear-detail-activity-list .rel-item:hover,
+.activity-detail-gear-list .rel-item:hover {
   background: rgba(255, 255, 255, 0.05);
 }
-.route-detail-activity-list .rel-item.route-activity-best:hover {
-  background: rgba(34, 197, 94, 0.14);
+.route-detail-activity-list .rel-item.route-activity-best:hover,
+.gear-detail-activity-list .rel-item:hover,
+.activity-detail-gear-list .rel-item:hover {
+  border-color: var(--accent);
 }
 
 .skeleton-route-chart {

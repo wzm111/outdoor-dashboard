@@ -387,6 +387,10 @@ function openActivityDetail(activity, gearMap) {
       const g = map.get(slug);
       if (g && g.weight_g != null) { totalWeight += Number(g.weight_g); weighed += 1; }
       const item = el('div', { class: 'rel-item' + (g ? '' : ' rel-item-missing') });
+      if (g) {
+        item.style.cursor = 'pointer';
+        item.title = '点击打开装备详情';
+      }
       const info = el('div', { class: 'rel-info' });
       if (g) {
         info.appendChild(el('div', { class: 'rel-name' }, g.name || g.slug));
@@ -402,9 +406,7 @@ function openActivityDetail(activity, gearMap) {
       }
       item.appendChild(info);
       if (g) {
-        const detailBtn = el('button', { class: 'btn-sm' }, '详情');
-        detailBtn.addEventListener('click', (e) => { e.stopPropagation(); openGearDetail(g); });
-        item.appendChild(detailBtn);
+        item.addEventListener('click', () => openGearDetail(g));
       }
       gearList.appendChild(item);
     }
