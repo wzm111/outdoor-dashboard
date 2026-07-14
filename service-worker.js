@@ -6,8 +6,8 @@
  * - API 请求（/auth/token、/sync）一律走网络，绝不缓存（含密钥/JWT，且数据要新鲜）。
  *   离线时的数据回退由 app.js 用 localStorage 快照处理，不在 SW 层缓存响应。
  */
-const CACHE = 'outdoor-dashboard-v1.3.9';
-const SW_VERSION = 'v1.3.9-2026-07-14';
+const CACHE = 'outdoor-dashboard-v1.4.0';
+const SW_VERSION = 'v1.4.0-2026-07-14';
 // 核心外壳：必须全部缓存成功（addAll 原子操作），缺一不可离线运行
 const SHELL = [
   './',
@@ -23,6 +23,7 @@ const SHELL = [
   './activity-form.js',
   './gear-utils.js',
   './chart-utils.js',
+  './training-utils.js',
   './gpx-utils.js',
   './view-overview.js',
   './view-activities.js',
@@ -31,6 +32,7 @@ const SHELL = [
   './view-routes.js',
   './view-plans.js',
   './view-reports.js',
+  './view-training.js',
   './recommend-core.js',
   './app.js',
   './styles.css',
