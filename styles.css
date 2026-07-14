@@ -2359,3 +2359,102 @@ body.modal-open {
 }
 .maintenance-log-title { font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .maintenance-log-item { padding: 2px 0; }
+
+/* 恢复视图 */
+.progress-wrap { margin-top: 10px; }
+.progress-bar {
+  height: 12px;
+  background: var(--bg-elev);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.recovery-today-card {
+  border-left: 4px solid var(--accent);
+}
+.recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+.recovery-subcard {
+  background: var(--bg-elev);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+.recovery-subcard h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.recovery-subcard ul {
+  list-style: disc;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text);
+}
+.recovery-subcard li { padding: 3px 0; }
+.phase-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.recovery-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.recovery-day {
+  background: var(--bg-elev);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  border: 1px solid transparent;
+}
+.recovery-day.today {
+  border-color: var(--accent);
+  background: rgba(34, 197, 94, 0.08);
+}
+.recovery-day.past { opacity: 0.6; }
+.recovery-day-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.recovery-day-num { font-weight: 700; color: var(--accent); }
+.recovery-day-date { color: var(--text-dim); }
+.recovery-day-phase {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.recovery-day-acts {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.recovery-issues {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--warn-dim);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--warn);
+}
+.stat-flat { border-left-color: var(--info); }
+.stat-info { border-left-color: var(--info); }
