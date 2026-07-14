@@ -2535,3 +2535,50 @@ body.modal-open {
   background: rgba(59, 130, 246, 0.18);
   border-color: rgba(59, 130, 246, 0.45);
 }
+
+/* 总览今日卡片 */
+.today-card {
+  margin-bottom: 16px;
+}
+.today-card h3 {
+  margin-bottom: 12px;
+}
+.today-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.today-section {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.today-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.today-section-body {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text);
+  flex: 1;
+}
+.today-section .btn-sm {
+  align-self: flex-start;
+}
+.today-missing {
+  color: var(--text-muted);
+}
+@media (max-width: 900px) {
+  .today-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .today-grid { grid-template-columns: 1fr; }
+}

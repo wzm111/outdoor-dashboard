@@ -124,6 +124,9 @@ function renderOverview() {
   const view = viewEl('overview');
   clearViewKeepSkeleton(view);
 
+  const todayCard = renderTodayCard();
+  if (todayCard) view.appendChild(todayCard);
+
   const statGrid = el('div', { class: 'stat-grid' });
   statGrid.appendChild(statCard('总活动', acts.length, '次'));
   statGrid.appendChild(statCard('累计里程', num(totalDist, 1), 'km'));
@@ -159,4 +162,87 @@ function statCard(label, value, unit) {
     el('div', { class: 'label' }, label),
     el('div', { class: 'value' }, String(value), unit ? el('span', { class: 'unit' }, ' ' + unit) : null),
   );
+}
+
+function renderTodayCard() {
+  const d = state.data;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayBody = d.body_logs.find((b) => String(b.date) === today);
+
+  const recentActivity = [...d.activities]
+    .filter((a) => a.date)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+
+  let recoveryInfo = null;
+  if (recentActivity) {
+    const intensity = computeRecoveryIntensity(recentActivity);
+    const adjusted = adjustRecoveryDays(intensity, d.body_logs);
+    const activityDate = new Date(recentActivity.date);
+    const daysSince = Math.floor((new Date(today) - activityDate) / (24 * 3600 * 1000));
+    const remaining = adjusted.days - daysSince;
+    if (remaining > 0) {
+      recoveryInfo = { ...intensity, ...adjusted, remaining, daysSince };
+    }
+  }
+
+  const todayPlan = d.plans.find((p) => String(p.date) === today);
+  const weekly = computeWeeklyLoad(d.activities, 5);
+  const acwr = computeACWR(weekly);
+
+  const card = el('div', { class: 'report-card today-card' });
+  card.appendChild(el('h3', {}, '今日'));
+
+  const grid = el('div', { class: 'today-grid' });
+
+  const bodySection = el('div', { class: 'today-section' });
+  bodySection.appendChild(el('div', { class: 'today-section-title' }, '身体日志'));
+  if (todayBody) {
+    const facts = [];
+    if (todayBody.fatigue != null) facts.push(`疲劳 ${todayBody.fatigue}`);
+    if (todayBody.muscle_soreness != null) facts.push(`酸痛 ${todayBody.muscle_soreness}`);
+    if (todayBody.sleep_hours != null) facts.push(`睡眠 ${todayBody.sleep_hours}h`);
+    if (todayBody.knee_status) facts.push(`膝盖 ${todayBody.knee_status}`);
+    bodySection.appendChild(el('div', { class: 'today-section-body' }, facts.length ? facts.join(' · ') : '已记录'));
+  } else {
+    bodySection.appendChild(el('div', { class: 'today-section-body today-missing' }, '今天还没记录'));
+    const btn = el('button', { class: 'btn-sm btn-primary' }, '去记录');
+    btn.addEventListener('click', () => switchView('body'));
+    bodySection.appendChild(btn);
+  }
+  grid.appendChild(bodySection);
+
+  const recoverySection = el('div', { class: 'today-section' });
+  recoverySection.appendChild(el('div', { class: 'today-section-title' }, '恢复'));
+  if (recoveryInfo) {
+    recoverySection.appendChild(el('div', { class: 'today-section-body' },
+      `${recoveryInfo.level}强度活动后第 ${recoveryInfo.daysSince} 天，还剩 ${recoveryInfo.remaining} 天`));
+    const btn = el('button', { class: 'btn-sm' }, '查看恢复计划');
+    btn.addEventListener('click', () => switchView('recovery'));
+    recoverySection.appendChild(btn);
+  } else {
+    recoverySection.appendChild(el('div', { class: 'today-section-body' }, '无进行中的恢复阶段'));
+  }
+  grid.appendChild(recoverySection);
+
+  const planSection = el('div', { class: 'today-section' });
+  planSection.appendChild(el('div', { class: 'today-section-title' }, '计划'));
+  if (todayPlan) {
+    const name = todayPlan.route || todayPlan.plan_type || '今日计划';
+    planSection.appendChild(el('div', { class: 'today-section-body' }, name));
+    const btn = el('button', { class: 'btn-sm' }, '查看计划');
+    btn.addEventListener('click', () => switchView('plans'));
+    planSection.appendChild(btn);
+  } else {
+    planSection.appendChild(el('div', { class: 'today-section-body today-missing' }, '今天没有计划'));
+  }
+  grid.appendChild(planSection);
+
+  const loadSection = el('div', { class: 'today-section' });
+  loadSection.appendChild(el('div', { class: 'today-section-title' }, '本周负荷'));
+  loadSection.appendChild(el('div', { class: 'today-section-body' },
+    `${num(acwr.acute, 1)} km · ACWR ${acwr.ratio ? num(acwr.ratio, 2) : '—'}`));
+  grid.appendChild(loadSection);
+
+  card.appendChild(grid);
+  return card;
 }
