@@ -248,7 +248,7 @@ async function renderActivityGpxSection(activity, container) {
     }
   }
   url = String(url || '').trim();
-  if (!url || !url.startsWith('http')) return;
+  if (!url || (!url.startsWith('http') && !url.startsWith('data:'))) return;
 
   container.appendChild(el('div', { class: 'activity-detail-section-title' }, `海拔剖面（${sourceLabel}）`));
   const panel = el('div', { class: 'activity-detail-gpx-panel' });
@@ -598,6 +598,7 @@ function buildActivityMarkdown(data) {
   if (data.avg_hr) lines.push(`avg_hr: ${data.avg_hr}`);
   if (data.max_hr) lines.push(`max_hr: ${data.max_hr}`);
   if (data.weather) lines.push(`weather: "${data.weather}"`);
+  if (data.gpx_file) lines.push(`gpx_file: "${data.gpx_file}"`);
   const gearUsed = Array.isArray(data.gear_used) && data.gear_used.length ? data.gear_used : [];
   lines.push(serializeGearUsedBlock(gearUsed));
 

@@ -42,6 +42,81 @@ function openAddActivity(activity = null) {
   const weatherInput = el('input', { type: 'text', class: 'gear-select', value: activity && activity.weather ? activity.weather : '', placeholder: '天气简述', style: 'width:100%;' });
   const notesInput = el('textarea', { class: 'gear-select', rows: 3, placeholder: '备注、膝盖状态、装备反馈等', style: 'width:100%;' }, activity && activity.notes ? activity.notes : '');
 
+  // ---------- GPX 轨迹文件 ----------
+  const existingGpxUrl = activity?.data?.gpx_file || activity?.gpx_file || '';
+  let pendingGpxUrl = undefined; // undefined=未改动, null=删除, string=新上传
+  let pendingGpxFileName = '';
+  let pendingGpxStats = null;
+
+  const gpxFileInput = el('input', { type: 'file', accept: '.gpx,application/gpx+xml', style: 'display:none;' });
+  const gpxSelectBtn = el('button', { type: 'button', class: 'btn-sm' }, '选择 GPX 文件');
+  const gpxRemoveBtn = el('button', { type: 'button', class: 'btn-sm btn-danger-outline', style: 'display:none;' }, '移除 GPX');
+  const gpxStatus = el('div', { class: 'gpx-status' }, '未选择 GPX 文件');
+
+  function updateGpxStatus() {
+    if (pendingGpxUrl === null) {
+      gpxStatus.textContent = 'GPX 已移除';
+      gpxRemoveBtn.style.display = 'none';
+      return;
+    }
+    const url = pendingGpxUrl !== undefined ? pendingGpxUrl : existingGpxUrl;
+    if (!url) {
+      gpxStatus.textContent = '未选择 GPX 文件';
+      gpxRemoveBtn.style.display = 'none';
+      return;
+    }
+    if (pendingGpxUrl !== undefined && pendingGpxFileName) {
+      const size = pendingGpxUrl.length > 1024 ? `${(pendingGpxUrl.length / 1024).toFixed(1)} KB` : `${pendingGpxUrl.length} B`;
+      const statsText = pendingGpxStats
+        ? ` · 距离 ${num(pendingGpxStats.distanceKm, 1)} km · 爬升 ${pendingGpxStats.gainM} m`
+        : '';
+      gpxStatus.textContent = `已选择：${pendingGpxFileName} (${size})${statsText}`;
+      gpxRemoveBtn.style.display = '';
+      return;
+    }
+    // 保留已有的内嵌或外部 GPX
+    gpxStatus.textContent = '当前已附加 GPX 文件';
+    gpxRemoveBtn.style.display = '';
+  }
+
+  gpxSelectBtn.addEventListener('click', () => gpxFileInput.click());
+  gpxFileInput.addEventListener('change', async () => {
+    const file = gpxFileInput.files && gpxFileInput.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const points = parseGpxXml(text);
+      if (!points.length) {
+        toast('GPX 文件中未找到轨迹点', 'warn');
+        gpxFileInput.value = '';
+        return;
+      }
+      const dataUrl = `data:application/gpx+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+      if (dataUrl.length > 1024 * 1024) {
+        toast('GPX 文件过大（>1MB），建议先上传到外部图床/网盘再粘贴 URL', 'warn');
+        gpxFileInput.value = '';
+        return;
+      }
+      pendingGpxUrl = dataUrl;
+      pendingGpxFileName = file.name;
+      pendingGpxStats = computeGpxStats(points);
+      updateGpxStatus();
+    } catch (err) {
+      toast(`GPX 解析失败：${err.message || '未知错误'}`, 'error');
+      gpxFileInput.value = '';
+    }
+  });
+
+  gpxRemoveBtn.addEventListener('click', () => {
+    pendingGpxUrl = null;
+    pendingGpxFileName = '';
+    pendingGpxStats = null;
+    gpxFileInput.value = '';
+    updateGpxStatus();
+  });
+
+  updateGpxStatus();
+
   function updateRouteInput() {
     if (routeSel.value) {
       routeInput.value = routeSel.value;
@@ -170,6 +245,14 @@ function openAddActivity(activity = null) {
     el('div', { class: 'form-row' }, el('label', {}, '感受'), feltSel),
     el('div', { class: 'form-row' }, el('label', {}, '天气'), weatherInput),
     el('div', { class: 'form-row' }, el('label', {}, '备注'), notesInput),
+    el('div', { class: 'form-row' },
+      el('label', {}, 'GPX 轨迹'),
+      el('div', {},
+        gpxStatus,
+        el('div', { style: 'margin-top:6px; display:flex; gap:8px;' }, gpxSelectBtn, gpxRemoveBtn, gpxFileInput),
+        el('div', { style: 'margin-top:6px; font-size:12px; color:var(--text-dim);' }, '仅用于海拔剖面展示，不会覆盖距离/爬升/下降')
+      )
+    ),
     runningSection,
     hikingSection,
     climbingSection,
@@ -246,6 +329,13 @@ function openAddActivity(activity = null) {
     for (const [k, v] of Object.entries(sportData)) {
       if (v == null || v === '' || (Array.isArray(v) && !v.length)) delete data[k];
       else data[k] = v;
+    }
+
+    // GPX 轨迹：undefined 表示未改动，null 表示删除，string 表示新上传
+    if (pendingGpxUrl === null) {
+      delete data.gpx_file;
+    } else if (pendingGpxUrl !== undefined) {
+      data.gpx_file = pendingGpxUrl;
     }
 
     const rawMarkdown = buildActivityMarkdown(data);

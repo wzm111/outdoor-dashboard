@@ -144,11 +144,32 @@ function cleanGpxCache() {
   if (changed) writeGpxCache(cache);
 }
 
+/** 解码内嵌的 data:application/gpx+xml;base64,... URL，返回 XML 文本。 */
+function decodeGpxDataUrl(url) {
+  if (!url || !url.startsWith('data:application/gpx+xml;base64,')) return null;
+  const base64 = url.slice('data:application/gpx+xml;base64,'.length);
+  try {
+    return decodeURIComponent(escape(atob(base64)));
+  } catch (e) {
+    return null;
+  }
+}
+
 /** 获取 GPX 文本，带本地缓存与离线回退。
  *  返回 { ok, text, fromCache, error }。
  */
 async function fetchGpxWithCache(url) {
   cleanGpxCache();
+
+  // 内嵌 base64 data URL 直接解码，不走网络/缓存
+  if (url && url.startsWith('data:')) {
+    const text = decodeGpxDataUrl(url);
+    if (text == null) {
+      return { ok: false, text: null, fromCache: false, error: '无法解析内嵌 GPX 数据' };
+    }
+    return { ok: true, text, fromCache: false, error: null };
+  }
+
   const cache = readGpxCache();
   const cached = cache[url];
   if (cached && cached.text) {
