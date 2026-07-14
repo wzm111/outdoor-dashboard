@@ -163,6 +163,7 @@ function renderAll() {
   renderReports();
   renderTraining();
   renderRecovery();
+  renderAssistant();
   const d = state.data;
   $('#data-meta').textContent =
     `装备 ${d.gear.length} · 路线 ${d.routes.length} · 活动 ${d.activities.length} · ` +
@@ -184,8 +185,8 @@ async function clearCacheAndReload() {
 }
 
 const DEFAULT_VIEW = 'overview';
-const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports', 'training', 'recovery'];
-const MORE_VIEWS = ['routes', 'plans', 'reports', 'training', 'recovery'];
+const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports', 'training', 'recovery', 'assistant'];
+const MORE_VIEWS = ['routes', 'plans', 'reports', 'training', 'recovery', 'assistant'];
 
 /** 从 URL hash 解析当前视图，非法或空时回退到总览。 */
 function viewFromHash() {

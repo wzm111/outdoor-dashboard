@@ -57,6 +57,7 @@
         <button type="button" class="tab" data-view="reports">报告</button>
         <button type="button" class="tab" data-view="training">训练负荷</button>
         <button type="button" class="tab" data-view="recovery">恢复</button>
+        <button type="button" class="tab" data-view="assistant">AI 助手</button>
       </nav>
       <div class="topbar-actions">
         <span id="sync-status" class="sync-status"></span>
@@ -330,6 +331,13 @@
           </div>
         </div>
       </section>
+      <section class="view" data-view="assistant" hidden>
+        <div class="skeleton-screen" hidden>
+          <div class="skeleton-header"><div class="skeleton-text skeleton-header-title"></div></div>
+          <div class="skeleton-report-card chat-skeleton-card"><div class="skeleton-row skeleton"></div><div class="skeleton-row skeleton"></div></div>
+          <div class="skeleton-row skeleton chat-skeleton-input"></div>
+        </div>
+      </section>
     </main>
 
     <nav class="bottom-nav" id="bottom-nav" aria-label="主导航">
@@ -357,6 +365,7 @@
       <button type="button" class="bottom-more-item" data-view="reports">报告</button>
       <button type="button" class="bottom-more-item" data-view="training">训练负荷</button>
       <button type="button" class="bottom-more-item" data-view="recovery">恢复</button>
+      <button type="button" class="bottom-more-item" data-view="assistant">AI 助手</button>
     </div>
 
     <footer class="footer">
@@ -375,31 +384,33 @@
     <span>加载数据中…</span>
   </div>
 
-  <script src="version.js?v=1.5.3"></script>
-  <script src="utils.js?v=1.5.3"></script>
-  <script src="state.js?v=1.5.3"></script>
-  <script src="idb.js?v=1.5.3"></script>
-  <script src="api.js?v=1.5.3"></script>
-  <script src="ui-common.js?v=1.5.3"></script>
-  <script src="body-age.js?v=1.5.3"></script>
-  <script src="activity-core.js?v=1.5.3"></script>
-  <script src="activity-form.js?v=1.5.3"></script>
-  <script src="gear-utils.js?v=1.5.3"></script>
-  <script src="gpx-utils.js?v=1.5.3"></script>
-  <script src="chart-utils.js?v=1.5.3"></script>
-  <script src="training-utils.js?v=1.5.3"></script>
-  <script src="recovery-utils.js?v=1.5.3"></script>
-  <script src="body-quick-parse.js?v=1.5.3"></script>
-  <script src="view-overview.js?v=1.5.3"></script>
-  <script src="view-activities.js?v=1.5.3"></script>
-  <script src="view-body.js?v=1.5.3"></script>
-  <script src="view-gear.js?v=1.5.3"></script>
-  <script src="view-routes.js?v=1.5.3"></script>
-  <script src="view-plans.js?v=1.5.3"></script>
-  <script src="view-reports.js?v=1.5.3"></script>
-  <script src="view-training.js?v=1.5.3"></script>
-  <script src="view-recovery.js?v=1.5.3"></script>
-  <script src="recommend-core.js?v=1.5.3"></script>
-  <script src="app.js?v=1.5.3"></script>
+  <script src="version.js?v=1.6.0"></script>
+  <script src="utils.js?v=1.6.0"></script>
+  <script src="state.js?v=1.6.0"></script>
+  <script src="idb.js?v=1.6.0"></script>
+  <script src="api.js?v=1.6.0"></script>
+  <script src="ui-common.js?v=1.6.0"></script>
+  <script src="body-age.js?v=1.6.0"></script>
+  <script src="activity-core.js?v=1.6.0"></script>
+  <script src="activity-form.js?v=1.6.0"></script>
+  <script src="gear-utils.js?v=1.6.0"></script>
+  <script src="gpx-utils.js?v=1.6.0"></script>
+  <script src="chart-utils.js?v=1.6.0"></script>
+  <script src="training-utils.js?v=1.6.0"></script>
+  <script src="recovery-utils.js?v=1.6.0"></script>
+  <script src="body-quick-parse.js?v=1.6.0"></script>
+  <script src="assistant-utils.js?v=1.6.0"></script>
+  <script src="view-overview.js?v=1.6.0"></script>
+  <script src="view-activities.js?v=1.6.0"></script>
+  <script src="view-body.js?v=1.6.0"></script>
+  <script src="view-gear.js?v=1.6.0"></script>
+  <script src="view-routes.js?v=1.6.0"></script>
+  <script src="view-plans.js?v=1.6.0"></script>
+  <script src="view-reports.js?v=1.6.0"></script>
+  <script src="view-training.js?v=1.6.0"></script>
+  <script src="view-recovery.js?v=1.6.0"></script>
+  <script src="view-assistant.js?v=1.6.0"></script>
+  <script src="recommend-core.js?v=1.6.0"></script>
+  <script src="app.js?v=1.6.0"></script>
 </body>
 </html>

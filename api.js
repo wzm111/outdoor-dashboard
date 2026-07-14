@@ -273,6 +273,24 @@ async function fetchAiActivity(apiUrl, token, text) {
   return res.json();
 }
 
+/** AI 助手聊天：发送对话历史与数据上下文，返回 Markdown 答案。 */
+async function fetchAssistantChat(apiUrl, token, messages, context) {
+  const res = await fetchWithTimeout(`${apiBase(apiUrl)}/assistant/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ messages, context }),
+  }, 60000, 'AI 助手');
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`AI 助手失败 (${res.status})${t ? ': ' + t.slice(0, 120) : ''}`);
+  }
+  return res.json();
+}
+
 /** 保存单条身体记录：PUT /body/:date（存在则更新、不存在则插入）。 */
 async function fetchSaveBody(apiUrl, token, date, data, rawMarkdown) {
   const url = `${apiBase(apiUrl)}/body/${encodeURIComponent(date)}`;

@@ -2536,9 +2536,217 @@ body.modal-open {
   border-color: rgba(59, 130, 246, 0.45);
 }
 
-/* 总览今日卡片 */
-.today-card {
-  margin-bottom: 16px;
+/* AI 助手对话 */
+.chat-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+.chat-bubble {
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chat-bubble-user {
+  align-self: flex-end;
+}
+.chat-bubble-ai {
+  align-self: flex-start;
+}
+.chat-bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.chat-bubble-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.chat-bubble-user .chat-bubble-avatar {
+  background: var(--info-dim);
+  color: var(--info);
+}
+.chat-bubble-name {
+  font-weight: 600;
+}
+.chat-bubble-content {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  word-break: break-word;
+}
+.chat-bubble-user .chat-bubble-content {
+  background: var(--info-dim);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+.chat-bubble-content p {
+  margin-bottom: 8px;
+}
+.chat-bubble-content p:last-child {
+  margin-bottom: 0;
+}
+.chat-bubble-content ul {
+  margin: 8px 0;
+  padding-left: 18px;
+}
+.chat-bubble-content li {
+  margin-bottom: 4px;
+}
+.chat-bubble-content code {
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.chat-bubble-content pre {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.chat-typing::after {
+  content: '…';
+  animation: chatTyping 1.5s infinite;
+}
+@keyframes chatTyping {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
+.chat-quick-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.chat-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.10);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #bbf7d0;
+  cursor: pointer;
+  transition: background-color var(--transition), border-color var(--transition), transform var(--transition);
+}
+.chat-quick-chip:hover {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.45);
+  transform: translateY(-1px);
+}
+.chat-input-area {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.chat-textarea {
+  flex: 1;
+  resize: none;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: inherit;
+}
+.chat-textarea::placeholder {
+  color: var(--text-muted);
+}
+.chat-send-btn {
+  height: 44px;
+  padding: 0 18px;
+  white-space: nowrap;
+}
+.chat-welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  color: var(--text-dim);
+  padding: 24px 16px;
+}
+.chat-welcome-icon {
+  font-size: 48px;
+  line-height: 1;
+}
+.chat-welcome h3 {
+  color: var(--text);
+  font-size: 18px;
+}
+.chat-welcome p {
+  max-width: 480px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.view[data-view="assistant"] {
+  display: flex;
+  flex-direction: column;
+}
+.view[data-view="assistant"] .section-title {
+  flex-shrink: 0;
+}
+.chat-skeleton-card {
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 12px;
+}
+.chat-skeleton-card .skeleton-row {
+  height: 14px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+.chat-skeleton-card .skeleton-row:last-child {
+  margin-bottom: 0;
+}
+.chat-skeleton-input {
+  height: 44px;
+  border-radius: var(--radius);
+  margin-top: 12px;
+}
+@media (max-width: 640px) {
+  .chat-bubble {
+    max-width: 92%;
+  }
+  .chat-messages {
+    padding: 10px;
+  }
 }
 .today-card h3 {
   margin-bottom: 12px;
