@@ -181,6 +181,69 @@ function renderBody() {
   $('.btn-sm[data-action="add-body"]', headerRow).addEventListener('click', () => openAddBody());
   $('.btn-sm[data-action="add-body-ai"]', headerRow).addEventListener('click', () => openAddBodyByAi());
 
+  // 快速录入栏
+  const quickWrap = el('div', { class: 'report-card body-quick-card' });
+  quickWrap.appendChild(el('h3', {}, '快速记录'));
+  const quickInput = el('input', { type: 'text', class: 'gear-select body-quick-input', placeholder: '例如：昨晚睡了7小时，今天疲劳3，膝盖良好' });
+  const quickHint = el('div', { class: 'body-quick-hint' }, '支持：睡眠/疲劳/酸痛/膝盖/心情/体重/日期/备注');
+  const quickResult = el('div', { class: 'body-quick-result' });
+  const quickBtn = el('button', { class: 'btn btn-primary' }, '识别并保存');
+
+  function updateQuickPreview() {
+    const text = quickInput.value.trim();
+    quickResult.innerHTML = '';
+    if (!text) return;
+    const parsed = parseBodyQuickText(text);
+    const facts = [
+      ['日期', parsed.date],
+      ['睡眠', parsed.sleep_hours != null ? parsed.sleep_hours + ' h' : null],
+      ['疲劳度', parsed.fatigue],
+      ['肌肉酸痛', parsed.muscle_soreness],
+      ['膝盖状态', parsed.knee_status],
+      ['心情', parsed.mood],
+      ['体重', parsed.weight_kg != null ? parsed.weight_kg + ' kg' : null],
+      ['备注', parsed.notes],
+    ].filter(([, v]) => v != null && v !== '');
+    if (facts.length) {
+      const list = el('ul', { class: 'detail-list' });
+      for (const [k, v] of facts) list.appendChild(el('li', {}, el('strong', {}, k + '：'), document.createTextNode(String(v))));
+      quickResult.appendChild(list);
+    }
+  }
+
+  quickInput.addEventListener('input', updateQuickPreview);
+  quickInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') quickBtn.click();
+  });
+
+  quickBtn.addEventListener('click', async () => {
+    const text = quickInput.value.trim();
+    if (!text) { toast('请先输入身体状态', 'warn'); return; }
+    const parsed = parseBodyQuickText(text);
+    if (!parsed.date) { toast('未识别到有效日期', 'warn'); return; }
+    quickBtn.disabled = true;
+    quickBtn.textContent = '保存中…';
+    try {
+      await fetchSaveBody(state.apiUrl, state.token, parsed.date, parsed, buildBodyMarkdown(parsed));
+      toast('身体记录已保存', 'success');
+      quickInput.value = '';
+      quickResult.innerHTML = '';
+      await loadAndRender(true);
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+    } finally {
+      quickBtn.disabled = false;
+      quickBtn.textContent = '识别并保存';
+    }
+  });
+
+  const quickActions = el('div', { class: 'body-quick-actions' }, quickBtn);
+  quickWrap.appendChild(quickInput);
+  quickWrap.appendChild(quickHint);
+  quickWrap.appendChild(quickResult);
+  quickWrap.appendChild(quickActions);
+  view.appendChild(quickWrap);
+
   if (!logs.length) {
     view.appendChild(el('div', { class: 'empty' }, '暂无身体记录'));
     return;
