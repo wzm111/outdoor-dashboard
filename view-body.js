@@ -1,6 +1,38 @@
 /* 身体趋势视图渲染 */
 'use strict';
 
+const BODY_QUICK_HISTORY_KEY = 'outdoor_body_quick_history';
+const BODY_QUICK_HISTORY_LIMIT = 5;
+const BODY_QUICK_TEMPLATES = [
+  { label: '状态正常', text: '今天状态正常，疲劳2，膝盖良好' },
+  { label: '睡眠不足', text: '昨晚睡眠6小时，今天疲劳4' },
+  { label: '膝盖不适', text: '今天膝盖一般，疲劳3' },
+  { label: '酸痛明显', text: '今天肌肉酸痛4，疲劳3' },
+  { label: '休息恢复', text: '今天完全休息，膝盖良好' },
+];
+
+function getBodyQuickHistory() {
+  try {
+    const raw = localStorage.getItem(BODY_QUICK_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, BODY_QUICK_HISTORY_LIMIT) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveBodyQuickHistory(phrase) {
+  if (!phrase) return;
+  const history = getBodyQuickHistory().filter((p) => p !== phrase);
+  history.unshift(phrase);
+  try {
+    localStorage.setItem(BODY_QUICK_HISTORY_KEY, JSON.stringify(history.slice(0, BODY_QUICK_HISTORY_LIMIT)));
+  } catch (e) {
+    // ignore storage errors
+  }
+}
+
 // ---------- 身体趋势（canvas 折线） ----------
 
 function buildBodyMarkdown(data) {
@@ -186,6 +218,36 @@ function renderBody() {
   quickWrap.appendChild(el('h3', {}, '快速记录'));
   const quickInput = el('input', { type: 'text', class: 'gear-select body-quick-input', placeholder: '例如：昨晚睡了7小时，今天疲劳3，膝盖良好' });
   const quickHint = el('div', { class: 'body-quick-hint' }, '支持：睡眠/疲劳/酸痛/膝盖/心情/体重/日期/备注');
+
+  const templateChips = el('div', { class: 'body-quick-chips' });
+  for (const t of BODY_QUICK_TEMPLATES) {
+    const chip = el('button', { type: 'button', class: 'body-quick-chip' }, t.label);
+    chip.addEventListener('click', () => {
+      quickInput.value = t.text;
+      updateQuickPreview();
+      quickInput.focus();
+    });
+    templateChips.appendChild(chip);
+  }
+
+  const historyChips = el('div', { class: 'body-quick-chips body-quick-history' });
+  function renderHistory() {
+    historyChips.innerHTML = '';
+    const history = getBodyQuickHistory();
+    if (!history.length) return;
+    historyChips.appendChild(el('span', { class: 'body-quick-history-label' }, '最近：'));
+    for (const phrase of history) {
+      const chip = el('button', { type: 'button', class: 'body-quick-chip body-quick-chip-history' }, phrase);
+      chip.addEventListener('click', () => {
+        quickInput.value = phrase;
+        updateQuickPreview();
+        quickInput.focus();
+      });
+      historyChips.appendChild(chip);
+    }
+  }
+  renderHistory();
+
   const quickResult = el('div', { class: 'body-quick-result' });
   const quickBtn = el('button', { class: 'btn btn-primary' }, '识别并保存');
 
@@ -225,9 +287,11 @@ function renderBody() {
     quickBtn.textContent = '保存中…';
     try {
       await fetchSaveBody(state.apiUrl, state.token, parsed.date, parsed, buildBodyMarkdown(parsed));
+      saveBodyQuickHistory(text);
       toast('身体记录已保存', 'success');
       quickInput.value = '';
       quickResult.innerHTML = '';
+      renderHistory();
       await loadAndRender(true);
     } catch (err) {
       toast(err.message || '保存失败', 'error');
@@ -240,6 +304,8 @@ function renderBody() {
   const quickActions = el('div', { class: 'body-quick-actions' }, quickBtn);
   quickWrap.appendChild(quickInput);
   quickWrap.appendChild(quickHint);
+  quickWrap.appendChild(templateChips);
+  quickWrap.appendChild(historyChips);
   quickWrap.appendChild(quickResult);
   quickWrap.appendChild(quickActions);
   view.appendChild(quickWrap);
