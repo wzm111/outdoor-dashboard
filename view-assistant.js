@@ -26,6 +26,14 @@ function renderAssistant() {
   let messages = getChatHistory();
   let isLoading = false;
 
+  messagesWrap.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chat-bubble-delete');
+    if (!btn) return;
+    e.stopPropagation();
+    const id = btn.dataset.id;
+    if (id) handleDeleteMessage(id);
+  });
+
   function classifyUserIntent(text) {
     const t = String(text || '').trim();
     if (!t) return 'query';
@@ -81,11 +89,6 @@ function renderAssistant() {
       bubble.appendChild(meta);
       bubble.appendChild(content);
       messagesWrap.appendChild(bubble);
-
-      const delBtn = bubble.querySelector('.chat-bubble-delete');
-      if (delBtn) {
-        delBtn.addEventListener('click', () => handleDeleteMessage(m.id));
-      }
     }
 
     // 加载中提示
