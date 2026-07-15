@@ -30,6 +30,8 @@ function saveChatHistory(messages) {
   const trimmed = messages.slice(-CHAT_HISTORY_LIMIT).map((m) => ({
     role: m.role,
     content: String(m.content || '').slice(0, CHAT_MAX_MESSAGE_LENGTH),
+    type: m.type || null,
+    action: m.action || null,
     time: m.time || new Date().toISOString(),
   }));
   try {
@@ -218,4 +220,139 @@ function formatChatTime(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// ---------- AI 助手「确认后执行」卡片 ----------
+
+function findLocalConflict(intent, data) {
+  if (!state.data) return null;
+  if (intent === 'body') {
+    const date = String(data.date || '').slice(0, 10);
+    if (!date) return null;
+    return state.data.body_logs.find((b) => String(b.date) === date) || null;
+  }
+  if (intent === 'activity') {
+    const date = String(data.date || '').slice(0, 10);
+    const route = String(data.route || '');
+    const sequence = Number(data.sequence || 0);
+    if (!date) return null;
+    return state.data.activities.find((a) =>
+      String(a.date) === date &&
+      String(a.route || '') === route &&
+      Number(a.sequence || 0) === sequence
+    ) || null;
+  }
+  if (intent === 'plan') {
+    const date = String(data.date || '').slice(0, 10);
+    const route = String(data.route || '');
+    if (!date) return null;
+    return state.data.plans.find((p) =>
+      String(p.date) === date && String(p.route || '') === route
+    ) || null;
+  }
+  return null;
+}
+
+function renderActionCard(action, onConfirm, onCancel) {
+  const wrap = el('div', { class: 'chat-action-card' });
+
+  const header = el('div', { class: 'chat-action-header' });
+  header.appendChild(el('span', { class: 'chat-action-icon' }, action.action === 'update' ? '🔄' : '➕'));
+  header.appendChild(el('span', { class: 'chat-action-title' },
+    action.intent === 'body' ? '身体日志' :
+    action.intent === 'activity' ? '活动记录' : '行程计划'
+  ));
+  header.appendChild(el('span', { class: 'chat-action-badge' },
+    action.action === 'update' ? '更新' : '创建'
+  ));
+  wrap.appendChild(header);
+
+  if (action.message) {
+    wrap.appendChild(el('div', { class: 'chat-action-message' }, action.message));
+  }
+
+  if (action.preview) {
+    const pre = el('pre', { class: 'chat-action-preview' }, escapeHtml(action.preview));
+    wrap.appendChild(pre);
+  }
+
+  if (action.existing) {
+    wrap.appendChild(el('div', { class: 'chat-action-warning' },
+      '⚠️ 该日期已有记录，确认后将覆盖原有数据。'
+    ));
+  }
+
+  const actions = el('div', { class: 'chat-action-actions' });
+  const confirmBtn = el('button', { class: 'btn btn-primary btn-sm' },
+    action.action === 'update' ? '确认更新' : '确认创建'
+  );
+  const cancelBtn = el('button', { class: 'btn btn-sm' }, '取消');
+
+  confirmBtn.addEventListener('click', () => {
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    onConfirm();
+  });
+  cancelBtn.addEventListener('click', () => {
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    onCancel();
+  });
+
+  actions.appendChild(confirmBtn);
+  actions.appendChild(cancelBtn);
+  wrap.appendChild(actions);
+
+  return wrap;
+}
+
+function nextActivitySequence(date, route) {
+  const same = (state.data.activities || []).filter((a) =>
+    String(a.date) === String(date) && String(a.route || '') === String(route || '')
+  );
+  return same.length ? Math.max(...same.map((a) => Number(a.sequence || 0))) + 1 : 0;
+}
+
+async function executeProposedAction(action) {
+  const { intent, action: mode, data } = action;
+
+  if (intent === 'body') {
+    const payload = { ...data };
+    delete payload.date;
+    await fetchSaveBody(state.apiUrl, state.token, data.date, payload, buildBodyMarkdown(data));
+    return { ok: true, message: '身体日志已保存' };
+  }
+
+  if (intent === 'activity') {
+    const activityData = {
+      ...data,
+      gear_used: Array.isArray(data.gear_used) ? data.gear_used : [],
+    };
+    const route = activityData.route || '活动';
+    const sequence = nextActivitySequence(activityData.date, route);
+    const payload = {
+      date: activityData.date,
+      route,
+      sequence,
+      data: activityData,
+      raw_markdown: buildActivityMarkdown(activityData),
+    };
+    await fetchSaveActivity(state.apiUrl, state.token, payload);
+    return { ok: true, message: '活动记录已保存' };
+  }
+
+  if (intent === 'plan') {
+    const planData = { ...data };
+    delete planData._recommend;
+    const existing = findLocalConflict('plan', planData);
+    const payload = { data: planData, raw_markdown: buildPlanMarkdown(planData) };
+    if (existing && existing.id) {
+      await fetchUpdatePlan(state.apiUrl, state.token, existing.id, payload);
+    } else {
+      await fetchSavePlan(state.apiUrl, state.token, payload);
+    }
+    return { ok: true, message: '行程计划已保存' };
+  }
+
+  return { ok: false, error: '未知意图' };
 }

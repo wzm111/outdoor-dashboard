@@ -2740,12 +2740,81 @@ body.modal-open {
   border-radius: var(--radius);
   margin-top: 12px;
 }
+.chat-action-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 260px;
+}
+.chat-action-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-action-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.chat-action-title {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+.chat-action-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.chat-action-message {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.chat-action-preview {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  margin: 0;
+}
+.chat-action-warning {
+  font-size: 12px;
+  color: var(--warn);
+  background: rgba(245, 158, 11, 0.10);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.chat-action-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
 @media (max-width: 640px) {
   .chat-bubble {
     max-width: 92%;
   }
   .chat-messages {
     padding: 10px;
+  }
+  .chat-action-actions {
+    flex-direction: column;
+  }
+  .chat-action-actions .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 .today-card h3 {

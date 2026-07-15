@@ -26,6 +26,10 @@ function renderAssistant() {
   let messages = getChatHistory();
   let isLoading = false;
 
+  function makeMessageId() {
+    return String(Date.now()) + '_' + String(Math.random()).slice(2, 8);
+  }
+
   function renderMessages() {
     messagesWrap.innerHTML = '';
     if (!messages.length) {
@@ -42,7 +46,15 @@ function renderAssistant() {
         el('span', { class: 'chat-bubble-time' }, formatChatTime(m.time))
       );
       const content = el('div', { class: 'chat-bubble-content' });
-      content.innerHTML = isUser ? escapeHtml(m.content) : renderMarkdown(m.content);
+
+      if (!isUser && m.type === 'proposed_action' && m.action) {
+        content.appendChild(renderActionCard(m.action, () => handleConfirmAction(m.id), () => handleCancelAction(m.id)));
+      } else if (isUser) {
+        content.innerHTML = escapeHtml(m.content);
+      } else {
+        content.innerHTML = renderMarkdown(m.content);
+      }
+
       bubble.appendChild(meta);
       bubble.appendChild(content);
       messagesWrap.appendChild(bubble);
@@ -65,6 +77,52 @@ function renderAssistant() {
 
     scrollToBottom();
     renderQuickQuestions();
+  }
+
+  async function handleConfirmAction(messageId) {
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx < 0 || messages[idx].type !== 'proposed_action') return;
+    const action = messages[idx].action;
+
+    try {
+      const result = await executeProposedAction(action);
+      if (!result.ok) throw new Error(result.error || '执行失败');
+      messages[idx] = {
+        id: messageId,
+        role: 'assistant',
+        content: `✅ ${result.message}\n\n${action.preview || ''}`,
+        time: new Date().toISOString(),
+      };
+      saveChatHistory(messages);
+      renderMessages();
+      await loadAndRender(true);
+      toast(result.message, 'success');
+    } catch (err) {
+      messages[idx] = {
+        id: messageId,
+        role: 'assistant',
+        type: 'proposed_action',
+        action,
+        content: action.message || '',
+        time: new Date().toISOString(),
+      };
+      saveChatHistory(messages);
+      renderMessages();
+      toast(err.message || '执行失败', 'error');
+    }
+  }
+
+  function handleCancelAction(messageId) {
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx < 0 || messages[idx].type !== 'proposed_action') return;
+    messages[idx] = {
+      id: messageId,
+      role: 'assistant',
+      content: '已取消操作。',
+      time: new Date().toISOString(),
+    };
+    saveChatHistory(messages);
+    renderMessages();
   }
 
   function renderWelcome() {
@@ -110,7 +168,7 @@ function renderAssistant() {
       return;
     }
 
-    const userMessage = { role: 'user', content: text, time: new Date().toISOString() };
+    const userMessage = { id: makeMessageId(), role: 'user', content: text, time: new Date().toISOString() };
     messages.push(userMessage);
     saveChatHistory(messages);
     textarea.value = '';
@@ -126,7 +184,33 @@ function renderAssistant() {
       if (!res.ok) {
         throw new Error(res.error || 'AI 回复失败');
       }
-      messages.push({ role: 'assistant', content: res.answer || '（AI 未返回内容）', time: new Date().toISOString() });
+
+      if (res.type === 'proposed_action') {
+        const action = {
+          intent: res.intent,
+          action: res.action,
+          data: res.data,
+          existing: res.existing,
+          message: res.message,
+          preview: res.preview,
+        };
+        // 用完整 state.data 做最终冲突校验
+        const localExisting = findLocalConflict(action.intent, action.data);
+        if (localExisting) {
+          action.existing = localExisting;
+          action.action = 'update';
+        }
+        messages.push({
+          id: makeMessageId(),
+          role: 'assistant',
+          type: 'proposed_action',
+          action,
+          content: action.message,
+          time: new Date().toISOString(),
+        });
+      } else {
+        messages.push({ id: makeMessageId(), role: 'assistant', content: res.answer || '（AI 未返回内容）', time: new Date().toISOString() });
+      }
       saveChatHistory(messages);
     } catch (err) {
       toast(err.message || 'AI 回复失败', 'error');
