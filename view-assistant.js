@@ -60,7 +60,13 @@ function renderAssistant() {
       const meta = el('div', { class: 'chat-bubble-meta' },
         el('span', { class: 'chat-bubble-avatar' }, isUser ? '你' : '🏔️'),
         el('span', { class: 'chat-bubble-name' }, isUser ? '你' : '户外助手'),
-        el('span', { class: 'chat-bubble-time' }, formatChatTime(m.time))
+        el('span', { class: 'chat-bubble-time' }, formatChatTime(m.time)),
+        el('button', {
+          type: 'button',
+          class: 'chat-bubble-delete',
+          title: '删除这条对话',
+          'data-id': m.id || '',
+        }, '×')
       );
       const content = el('div', { class: 'chat-bubble-content' });
 
@@ -75,6 +81,11 @@ function renderAssistant() {
       bubble.appendChild(meta);
       bubble.appendChild(content);
       messagesWrap.appendChild(bubble);
+
+      const delBtn = bubble.querySelector('.chat-bubble-delete');
+      if (delBtn) {
+        delBtn.addEventListener('click', () => handleDeleteMessage(m.id));
+      }
     }
 
     // 加载中提示
@@ -140,6 +151,17 @@ function renderAssistant() {
     };
     saveChatHistory(messages);
     renderMessages();
+  }
+
+  function handleDeleteMessage(messageId) {
+    if (!messageId) return;
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx < 0) return;
+    if (!confirm('删除这条对话？后续 AI 回复将不再参考这条消息。')) return;
+    messages.splice(idx, 1);
+    saveChatHistory(messages);
+    renderMessages();
+    toast('已删除', 'success');
   }
 
   function renderWelcome() {
