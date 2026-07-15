@@ -26,6 +26,23 @@ function renderAssistant() {
   let messages = getChatHistory();
   let isLoading = false;
 
+  function classifyUserIntent(text) {
+    const t = String(text || '').trim();
+    if (!t) return 'query';
+    const planSignals = ['帮我计划', '帮我规划', '计划', '规划', '安排', '推荐装备', '生成计划'];
+    if (planSignals.some((w) => t.includes(w))) return 'plan';
+    const bodySignals = ['睡眠', '疲劳', '酸痛', '膝盖', '心情', '体重', '身体', '记录身体', '身体日志', '休息', '恢复'];
+    if (bodySignals.some((w) => t.includes(w))) return 'body';
+    const activitySignals = ['跑步', '跑了', '徒步', '走了', '爬山', '骑行', '骑了', '攀岩', '爬了', '活动', '记录运动', '记录活动'];
+    if (activitySignals.some((w) => t.includes(w))) return 'activity';
+    if (/^(记录|添加|新增|记一下|保存|写入)/.test(t)) {
+      if (/身体|睡眠|疲劳|体重|膝盖|心情|酸痛/.test(t)) return 'body';
+      if (/跑|走|骑|爬|活动|运动/.test(t)) return 'activity';
+      if (/路线|计划/.test(t)) return 'plan';
+    }
+    return 'query';
+  }
+
   function makeMessageId() {
     return String(Date.now()) + '_' + String(Math.random()).slice(2, 8);
   }
@@ -176,7 +193,7 @@ function renderAssistant() {
     isLoading = true;
     renderMessages();
 
-    const context = buildAssistantContext(state.data);
+    const context = buildAssistantContext(state.data, classifyUserIntent(text));
     const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }));
 
     try {
