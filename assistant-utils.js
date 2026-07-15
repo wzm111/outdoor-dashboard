@@ -108,6 +108,7 @@ function buildAssistantContext(data) {
   }));
 
   const routeSummary = routes.map((r) => ({
+    slug: r.slug || '',
     name: r.name || r.slug || '',
     location: r.location || '',
     distance_km: Number(r.distance_km) || 0,
