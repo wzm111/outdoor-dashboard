@@ -27,13 +27,10 @@ function renderAssistant() {
   let isLoading = false;
 
   messagesWrap.addEventListener('click', (e) => {
-    console.log('[delete debug] messagesWrap click', e.target, e.target.closest('.chat-bubble-delete'));
     const btn = e.target.closest('.chat-bubble-delete');
     if (!btn) return;
     e.stopPropagation();
     const id = btn.dataset.id;
-    console.log('[delete debug] delete button clicked, id=', id);
-    toast('删除按钮被点击: ' + id, 'info');
     if (id) handleDeleteMessage(id);
   });
 
@@ -65,7 +62,9 @@ function renderAssistant() {
       return;
     }
 
-    for (const m of messages) {
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (!m.id) m.id = makeMessageId();
       const isUser = m.role === 'user';
       const bubble = el('div', { class: `chat-bubble ${isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}` });
       const meta = el('div', { class: 'chat-bubble-meta' },
