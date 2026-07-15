@@ -177,11 +177,13 @@ function renderTodayCard() {
   if (recentActivity) {
     const intensity = computeRecoveryIntensity(recentActivity);
     const adjusted = adjustRecoveryDays(intensity, d.body_logs);
-    const activityDate = new Date(recentActivity.date);
-    const daysSince = Math.floor((new Date(today) - activityDate) / (24 * 3600 * 1000));
-    const remaining = adjusted.days - daysSince;
-    if (remaining > 0) {
-      recoveryInfo = { ...intensity, ...adjusted, remaining, daysSince };
+    const activityDate = safeParseDate(recentActivity.date);
+    if (activityDate) {
+      const daysSince = Math.floor((new Date(today) - activityDate) / (24 * 3600 * 1000));
+      const remaining = adjusted.days - daysSince;
+      if (remaining > 0) {
+        recoveryInfo = { ...intensity, ...adjusted, remaining, daysSince };
+      }
     }
   }
 

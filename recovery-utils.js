@@ -144,13 +144,24 @@ function generateRecoveryDay(day, totalDays, intensity, avgFatigue, issues, type
   return { day, phase, phaseDesc, activities, stretches, notes };
 }
 
+function safeParseDate(d) {
+  if (!d) return null;
+  const s = String(d).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const dt = new Date(s + 'T00:00:00');
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
 /** 基于最近一次高强度活动生成完整恢复计划 */
 function computeRecoveryPlan(activities, bodyLogs, refDate = null) {
-  const today = refDate ? new Date(refDate + 'T00:00:00') : new Date();
+  const today = safeParseDate(refDate) || new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
   const recentActivity = (activities || [])
-    .filter((a) => a.date && String(a.date) <= todayStr)
+    .filter((a) => {
+      const d = safeParseDate(a.date);
+      return d && d.toISOString().slice(0, 10) <= todayStr;
+    })
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
 
   if (!recentActivity) return null;
@@ -159,7 +170,8 @@ function computeRecoveryPlan(activities, bodyLogs, refDate = null) {
   const adjustment = adjustRecoveryDays(intensity, bodyLogs);
   const totalDays = adjustment.days;
 
-  const activityDate = new Date(String(recentActivity.date) + 'T00:00:00');
+  const activityDate = safeParseDate(recentActivity.date);
+  if (!activityDate) return null;
   const endDate = new Date(activityDate);
   endDate.setDate(activityDate.getDate() + totalDays);
 

@@ -82,7 +82,9 @@ function renderRecovery() {
 
   const daysWrap = el('div', { class: 'recovery-days' });
   for (const d of plan.daysPlan) {
-    const dayDate = new Date(plan.activityDate + 'T00:00:00');
+    const baseDate = safeParseDate(plan.activityDate);
+    if (!baseDate) continue;
+    const dayDate = new Date(baseDate);
     dayDate.setDate(dayDate.getDate() + d.day);
     const dateStr = dayDate.toISOString().slice(0, 10);
     const isToday = dateStr === new Date().toISOString().slice(0, 10);
