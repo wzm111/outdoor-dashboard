@@ -6,12 +6,16 @@ const CHAT_HISTORY_LIMIT = 50;
 const CHAT_MAX_MESSAGE_LENGTH = 2000;
 
 const CHAT_QUICK_QUESTIONS = [
+  { label: '本周报告', text: '生成本周训练报告。' },
   { label: '最近状态', text: '根据我最近的数据，分析我的训练状态和身体恢复情况。' },
   { label: '本周负荷', text: '我本周的训练负荷怎么样？ACWR 是多少？' },
   { label: '推荐路线', text: '根据我的体能和最近的恢复情况，推荐一条适合本周的路线。' },
   { label: '闲置装备', text: '我的装备里有哪些使用次数很少或长期闲置的？' },
   { label: '伤病关注', text: '我近期有哪些身体不适或伤病需要关注？' },
 ];
+
+const WEEKLY_REPORT_KEY = 'outdoor_assistant_weekly_report';
+const WEEKLY_REPORT_SEEN_KEY = 'outdoor_assistant_weekly_report_seen';
 
 function getChatHistory() {
   try {
@@ -44,6 +48,93 @@ function saveChatHistory(messages) {
 function clearChatHistory() {
   try {
     localStorage.removeItem(CHAT_HISTORY_KEY);
+  } catch (e) {
+    // ignore
+  }
+}
+
+function getCurrentWeekKey() {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  return monday.toISOString().slice(0, 10);
+}
+
+function getWeekRange(weekKey) {
+  const start = new Date(weekKey + 'T00:00:00');
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
+function computeWeeklySummary(data) {
+  if (!data) return null;
+  const activities = data.activities || [];
+  const bodyLogs = data.body_logs || [];
+
+  const weekKey = getCurrentWeekKey();
+  const { start, end } = getWeekRange(weekKey);
+
+  const weekActivities = activities.filter((a) => a.date >= start && a.date <= end);
+  const weekBodyLogs = bodyLogs.filter((b) => b.date >= start && b.date <= end);
+
+  const totalDistance = weekActivities.reduce((s, a) => s + (Number(a.distance_km) || 0), 0);
+  const totalElevation = weekActivities.reduce((s, a) => s + (Number(a.elevation_gain_m) || 0), 0);
+  const totalDuration = weekActivities.reduce((s, a) => s + (Number(a.duration_hours) || 0), 0);
+
+  const weekly = computeWeeklyLoad(activities, 5);
+  const acwr = computeACWR(weekly);
+  const fatigue = computeFatigueScore(bodyLogs);
+
+  const sleepValues = weekBodyLogs.map((b) => Number(b.sleep_hours)).filter((v) => !isNaN(v));
+  const fatigueValues = weekBodyLogs.map((b) => Number(b.fatigue)).filter((v) => !isNaN(v));
+
+  return {
+    weekKey,
+    range: { start, end },
+    activityCount: weekActivities.length,
+    totalDistance,
+    totalElevation,
+    totalDuration,
+    avgSleep: sleepValues.length ? sleepValues.reduce((s, v) => s + v, 0) / sleepValues.length : null,
+    avgFatigue: fatigueValues.length ? fatigueValues.reduce((s, v) => s + v, 0) / fatigueValues.length : null,
+    acwr,
+    fatigue,
+  };
+}
+
+function getWeeklyReportCache() {
+  try {
+    const raw = localStorage.getItem(WEEKLY_REPORT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.weekKey !== getCurrentWeekKey()) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveWeeklyReportCache(report) {
+  try {
+    localStorage.setItem(WEEKLY_REPORT_KEY, JSON.stringify(report));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function hasSeenWeeklyReport() {
+  try {
+    return localStorage.getItem(WEEKLY_REPORT_SEEN_KEY) === getCurrentWeekKey();
+  } catch (e) {
+    return false;
+  }
+}
+
+function markWeeklyReportSeen() {
+  try {
+    localStorage.setItem(WEEKLY_REPORT_SEEN_KEY, getCurrentWeekKey());
   } catch (e) {
     // ignore
   }

@@ -39,6 +39,8 @@ function renderAssistant() {
     if (!t) return 'query';
     const planSignals = ['帮我计划', '帮我规划', '计划', '规划', '安排', '推荐装备', '生成计划'];
     if (planSignals.some((w) => t.includes(w))) return 'plan';
+    const batchSignals = ['批量', '导入', '录入这些', '这些', '这几条', '多条', '历史记录'];
+    if (batchSignals.some((w) => t.includes(w))) return 'batch';
     const bodySignals = ['睡眠', '疲劳', '酸痛', '膝盖', '心情', '体重', '身体', '记录身体', '身体日志', '休息', '恢复'];
     if (bodySignals.some((w) => t.includes(w))) return 'body';
     const activitySignals = ['跑步', '跑了', '徒步', '走了', '爬山', '骑行', '骑了', '攀岩', '爬了', '活动', '记录运动', '记录活动'];
@@ -57,6 +59,7 @@ function renderAssistant() {
 
   function renderMessages() {
     messagesWrap.innerHTML = '';
+    renderWeeklyReport();
     if (!messages.length) {
       renderWelcome();
       return;
@@ -178,6 +181,95 @@ function renderAssistant() {
     );
     messagesWrap.appendChild(welcome);
     renderQuickQuestions();
+  }
+
+  function renderWeeklyReport() {
+    if (!state.data) return;
+    if (hasSeenWeeklyReport()) return;
+
+    let report = getWeeklyReportCache();
+    if (!report) {
+      const summary = computeWeeklySummary(state.data);
+      if (!summary) return;
+      report = {
+        weekKey: summary.weekKey,
+        summary,
+        generatedAt: new Date().toISOString(),
+      };
+      saveWeeklyReportCache(report);
+    }
+
+    const summary = report.summary;
+    const card = el('div', { class: 'chat-weekly-report' });
+    const header = el('div', { class: 'chat-weekly-header' },
+      el('span', { class: 'chat-weekly-icon' }, '📊'),
+      el('span', { class: 'chat-weekly-title' }, `本周训练报告（${summary.range.start} ~ ${summary.range.end}）`),
+      el('button', { type: 'button', class: 'chat-weekly-close', title: '不再显示本周报告' }, '×')
+    );
+    card.appendChild(header);
+
+    const metrics = el('div', { class: 'chat-weekly-metrics' });
+    metrics.appendChild(el('div', { class: 'chat-weekly-metric' },
+      el('span', { class: 'chat-weekly-value' }, String(summary.activityCount)),
+      el('span', { class: 'chat-weekly-label' }, '活动')
+    ));
+    metrics.appendChild(el('div', { class: 'chat-weekly-metric' },
+      el('span', { class: 'chat-weekly-value' }, summary.totalDistance.toFixed(1)),
+      el('span', { class: 'chat-weekly-label' }, 'km')
+    ));
+    metrics.appendChild(el('div', { class: 'chat-weekly-metric' },
+      el('span', { class: 'chat-weekly-value' }, String(Math.round(summary.totalElevation))),
+      el('span', { class: 'chat-weekly-label' }, '爬升 m')
+    ));
+    metrics.appendChild(el('div', { class: 'chat-weekly-metric' },
+      el('span', { class: 'chat-weekly-value' }, summary.totalDuration.toFixed(1)),
+      el('span', { class: 'chat-weekly-label' }, '小时')
+    ));
+    card.appendChild(metrics);
+
+    const statusLines = [];
+    if (summary.acwr.ratio) {
+      statusLines.push(`ACWR：${summary.acwr.ratio.toFixed(2)}（${summary.acwr.status}）`);
+    }
+    if (summary.fatigue.score) {
+      statusLines.push(`疲劳：${summary.fatigue.score.toFixed(0)} 分（${summary.fatigue.status}）`);
+    }
+    if (summary.avgSleep != null) {
+      statusLines.push(`平均睡眠：${summary.avgSleep.toFixed(1)} h`);
+    }
+    if (summary.avgFatigue != null) {
+      statusLines.push(`平均疲劳：${summary.avgFatigue.toFixed(1)}`);
+    }
+
+    if (statusLines.length) {
+      card.appendChild(el('div', { class: 'chat-weekly-status' }, statusLines.join(' · ')));
+    }
+
+    const actions = el('div', { class: 'chat-weekly-actions' });
+    const detailBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm' }, '查看详细建议');
+    const dismissBtn = el('button', { type: 'button', class: 'btn btn-sm' }, '知道了');
+
+    detailBtn.addEventListener('click', () => {
+      textarea.value = '生成本周训练报告。';
+      adjustTextareaHeight();
+      sendMessage();
+      markWeeklyReportSeen();
+      card.remove();
+    });
+    dismissBtn.addEventListener('click', () => {
+      markWeeklyReportSeen();
+      card.remove();
+    });
+    header.querySelector('.chat-weekly-close').addEventListener('click', () => {
+      markWeeklyReportSeen();
+      card.remove();
+    });
+
+    actions.appendChild(detailBtn);
+    actions.appendChild(dismissBtn);
+    card.appendChild(actions);
+
+    messagesWrap.appendChild(card);
   }
 
   function renderQuickQuestions() {
