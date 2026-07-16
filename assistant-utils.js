@@ -326,12 +326,16 @@ function renderActionCard(action, onConfirm, onCancel) {
     'delete': '确认删除',
   };
 
+  const titleMap = {
+    'body': '身体日志',
+    'activity': '活动记录',
+    'plan': '行程计划',
+    'batch': '批量导入',
+  };
+
   const header = el('div', { class: 'chat-action-header' });
   header.appendChild(el('span', { class: 'chat-action-icon' }, iconMap[action.action] || '➕'));
-  header.appendChild(el('span', { class: 'chat-action-title' },
-    action.intent === 'body' ? '身体日志' :
-    action.intent === 'activity' ? '活动记录' : '行程计划'
-  ));
+  header.appendChild(el('span', { class: 'chat-action-title' }, titleMap[action.intent] || '操作'));
   header.appendChild(el('span', { class: 'chat-action-badge' }, badgeMap[action.action] || '创建'));
   wrap.appendChild(header);
 
@@ -382,6 +386,10 @@ function nextActivitySequence(date, route) {
 
 async function executeProposedAction(action) {
   const { intent, action: mode, data, existing } = action;
+
+  if (intent === 'batch') {
+    return executeBatchAction(action);
+  }
 
   if (intent === 'body') {
     if (mode === 'delete') {
@@ -438,4 +446,49 @@ async function executeProposedAction(action) {
   }
 
   return { ok: false, error: '未知意图' };
+}
+
+async function executeBatchAction(action) {
+  const items = Array.isArray(action.items) ? action.items : [];
+  if (!items.length) return { ok: false, error: '没有可导入的记录' };
+
+  let success = 0;
+  const errors = [];
+
+  for (const item of items) {
+    try {
+      if (item.entity === 'body') {
+        const payload = { ...item };
+        delete payload.entity;
+        delete payload.date;
+        await fetchSaveBody(state.apiUrl, state.token, item.date, payload, buildBodyMarkdown(item));
+        success++;
+      } else if (item.entity === 'activity') {
+        const activityData = { ...item, gear_used: Array.isArray(item.gear_used) ? item.gear_used : [] };
+        delete activityData.entity;
+        const route = activityData.route || '活动';
+        const sequence = nextActivitySequence(activityData.date, route);
+        const payload = {
+          date: activityData.date,
+          route,
+          sequence,
+          data: activityData,
+          raw_markdown: buildActivityMarkdown(activityData),
+        };
+        await fetchSaveActivity(state.apiUrl, state.token, payload);
+        success++;
+      }
+    } catch (err) {
+      errors.push(`${item.date} ${item.entity}: ${err.message || '失败'}`);
+    }
+  }
+
+  if (success === 0) {
+    return { ok: false, error: `批量导入全部失败：${errors.slice(0, 3).join('；')}` };
+  }
+
+  const message = errors.length
+    ? `已导入 ${success}/${items.length} 条，${errors.length} 条失败`
+    : `已导入 ${success} 条记录`;
+  return { ok: true, message };
 }

@@ -230,7 +230,13 @@ function renderAssistant() {
       }
 
       if (res.type === 'proposed_action') {
-        const action = {
+        const action = res.intent === 'batch' ? {
+          intent: 'batch',
+          action: 'create',
+          items: res.items,
+          message: res.message,
+          preview: res.preview,
+        } : {
           intent: res.intent,
           action: res.action,
           data: res.data,
@@ -238,11 +244,13 @@ function renderAssistant() {
           message: res.message,
           preview: res.preview,
         };
-        // 用完整 state.data 做最终冲突校验，仅当后端认为是创建时才可能提升为更新
-        const localExisting = findLocalConflict(action.intent, action.data);
-        if (action.action === 'create' && localExisting) {
-          action.existing = localExisting;
-          action.action = 'update';
+        if (action.intent !== 'batch') {
+          // 用完整 state.data 做最终冲突校验，仅当后端认为是创建时才可能提升为更新
+          const localExisting = findLocalConflict(action.intent, action.data);
+          if (action.action === 'create' && localExisting) {
+            action.existing = localExisting;
+            action.action = 'update';
+          }
         }
         messages.push({
           id: makeMessageId(),
