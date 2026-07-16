@@ -238,9 +238,9 @@ function renderAssistant() {
           message: res.message,
           preview: res.preview,
         };
-        // 用完整 state.data 做最终冲突校验
+        // 用完整 state.data 做最终冲突校验，仅当后端认为是创建时才可能提升为更新
         const localExisting = findLocalConflict(action.intent, action.data);
-        if (localExisting) {
+        if (action.action === 'create' && localExisting) {
           action.existing = localExisting;
           action.action = 'update';
         }

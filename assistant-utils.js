@@ -310,15 +310,29 @@ function findLocalConflict(intent, data) {
 function renderActionCard(action, onConfirm, onCancel) {
   const wrap = el('div', { class: 'chat-action-card' });
 
+  const iconMap = {
+    'create': '➕',
+    'update': '🔄',
+    'delete': '🗑️',
+  };
+  const badgeMap = {
+    'create': '创建',
+    'update': '更新',
+    'delete': '删除',
+  };
+  const confirmTextMap = {
+    'create': '确认创建',
+    'update': '确认更新',
+    'delete': '确认删除',
+  };
+
   const header = el('div', { class: 'chat-action-header' });
-  header.appendChild(el('span', { class: 'chat-action-icon' }, action.action === 'update' ? '🔄' : '➕'));
+  header.appendChild(el('span', { class: 'chat-action-icon' }, iconMap[action.action] || '➕'));
   header.appendChild(el('span', { class: 'chat-action-title' },
     action.intent === 'body' ? '身体日志' :
     action.intent === 'activity' ? '活动记录' : '行程计划'
   ));
-  header.appendChild(el('span', { class: 'chat-action-badge' },
-    action.action === 'update' ? '更新' : '创建'
-  ));
+  header.appendChild(el('span', { class: 'chat-action-badge' }, badgeMap[action.action] || '创建'));
   wrap.appendChild(header);
 
   if (action.message) {
@@ -331,15 +345,14 @@ function renderActionCard(action, onConfirm, onCancel) {
   }
 
   if (action.existing) {
-    wrap.appendChild(el('div', { class: 'chat-action-warning' },
-      '⚠️ 该日期已有记录，确认后将覆盖原有数据。'
-    ));
+    const warningText = action.action === 'delete'
+      ? '⚠️ 删除后不可恢复。'
+      : '⚠️ 该日期已有记录，确认后将覆盖原有数据。';
+    wrap.appendChild(el('div', { class: 'chat-action-warning' }, warningText));
   }
 
   const actions = el('div', { class: 'chat-action-actions' });
-  const confirmBtn = el('button', { class: 'btn btn-primary btn-sm' },
-    action.action === 'update' ? '确认更新' : '确认创建'
-  );
+  const confirmBtn = el('button', { class: 'btn btn-primary btn-sm' }, confirmTextMap[action.action] || '确认');
   const cancelBtn = el('button', { class: 'btn btn-sm' }, '取消');
 
   confirmBtn.addEventListener('click', () => {
@@ -368,9 +381,13 @@ function nextActivitySequence(date, route) {
 }
 
 async function executeProposedAction(action) {
-  const { intent, action: mode, data } = action;
+  const { intent, action: mode, data, existing } = action;
 
   if (intent === 'body') {
+    if (mode === 'delete') {
+      await fetchDelete(state.apiUrl, state.token, 'body', data.date);
+      return { ok: true, message: '身体日志已删除' };
+    }
     const payload = { ...data };
     delete payload.date;
     await fetchSaveBody(state.apiUrl, state.token, data.date, payload, buildBodyMarkdown(data));
@@ -378,12 +395,18 @@ async function executeProposedAction(action) {
   }
 
   if (intent === 'activity') {
+    if (mode === 'delete') {
+      const id = existing && existing.id;
+      if (!id) return { ok: false, error: '未找到活动 ID，无法删除' };
+      await fetchDelete(state.apiUrl, state.token, 'activities', id);
+      return { ok: true, message: '活动记录已删除' };
+    }
     const activityData = {
       ...data,
       gear_used: Array.isArray(data.gear_used) ? data.gear_used : [],
     };
     const route = activityData.route || '活动';
-    const sequence = nextActivitySequence(activityData.date, route);
+    const sequence = existing ? (existing.sequence ?? 0) : nextActivitySequence(activityData.date, route);
     const payload = {
       date: activityData.date,
       route,
@@ -396,12 +419,18 @@ async function executeProposedAction(action) {
   }
 
   if (intent === 'plan') {
+    if (mode === 'delete') {
+      const id = existing && existing.id;
+      if (!id) return { ok: false, error: '未找到计划 ID，无法删除' };
+      await fetchDelete(state.apiUrl, state.token, 'plans', id);
+      return { ok: true, message: '行程计划已删除' };
+    }
     const planData = { ...data };
     delete planData._recommend;
-    const existing = findLocalConflict('plan', planData);
+    const localExisting = findLocalConflict('plan', planData);
     const payload = { data: planData, raw_markdown: buildPlanMarkdown(planData) };
-    if (existing && existing.id) {
-      await fetchUpdatePlan(state.apiUrl, state.token, existing.id, payload);
+    if (localExisting && localExisting.id) {
+      await fetchUpdatePlan(state.apiUrl, state.token, localExisting.id, payload);
     } else {
       await fetchSavePlan(state.apiUrl, state.token, payload);
     }
