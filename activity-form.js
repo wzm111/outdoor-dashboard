@@ -133,12 +133,44 @@ function openAddActivity(activity = null) {
   }
 
   // ---------- 跑步专项 ----------
+  const paceInput = el('input', { type: 'text', class: 'gear-select', value: activity && activity.avg_pace ? String(activity.avg_pace).replace(/\s*\/km$/i, '') : '', placeholder: '如 5:55', style: 'width:100%;' });
   const cadenceInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.cadence != null ? activity.cadence : '', placeholder: '步频 spm', style: 'width:100%;' });
   const strideInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.stride_length_m != null ? activity.stride_length_m : '', step: '0.01', placeholder: '步幅 m', style: 'width:100%;' });
   const runningSection = el('div', { class: 'sport-fields', 'data-sport': 'running' },
+    el('div', { class: 'form-row' }, el('label', {}, '配速 (分:秒/km)'), paceInput),
     el('div', { class: 'form-row' }, el('label', {}, '步频'), cadenceInput),
     el('div', { class: 'form-row' }, el('label', {}, '步幅 (m)'), strideInput)
   );
+
+  // 配速/距离/时长联动：时长为空时由距离+配速自动补全；配速为空时由距离+时长反推
+  const durationHint = el('div', { style: 'font-size:12px; color:var(--text-dim); margin-top:2px;' }, '');
+  function refreshDurationHint() {
+    const v = durationInput.value ? Number(durationInput.value) : null;
+    durationHint.textContent = v ? `≈ ${fmtDuration(v)}` : '';
+  }
+  function autoDurationFromPace() {
+    const dist = distInput.value ? Number(distInput.value) : null;
+    if (!dist || durationInput.value) return;
+    const h = paceToDurationHours(dist, paceInput.value);
+    if (h) {
+      durationInput.value = String(h);
+      refreshDurationHint();
+    }
+  }
+  function autoPaceFromDuration() {
+    const dist = distInput.value ? Number(distInput.value) : null;
+    const dur = durationInput.value ? Number(durationInput.value) : null;
+    if (!dist || !dur || paceInput.value) return;
+    const p = paceMinPerKm(dist, dur);
+    if (p) paceInput.value = p.replace(/\s*\/km$/i, '');
+  }
+  paceInput.addEventListener('change', autoDurationFromPace);
+  distInput.addEventListener('change', autoDurationFromPace);
+  durationInput.addEventListener('input', refreshDurationHint);
+  durationInput.addEventListener('change', autoPaceFromDuration);
+  refreshDurationHint();
+  // 编辑旧记录时无配速但有距离+时长 → 预填配速
+  if (activity && !activity.avg_pace) autoPaceFromDuration();
 
   // ---------- 徒步专项 ----------
   const endDateInput = el('input', { type: 'date', class: 'gear-select', value: activity && activity.end_date ? fmtDate(activity.end_date) : '', style: 'width:100%;' });
@@ -239,7 +271,7 @@ function openAddActivity(activity = null) {
     el('div', { class: 'form-row' }, el('label', {}, '距离 (km) *'), distInput),
     el('div', { class: 'form-row' }, el('label', {}, '爬升 (m)'), gainInput),
     el('div', { class: 'form-row' }, el('label', {}, '下降 (m)'), lossInput),
-    el('div', { class: 'form-row' }, el('label', {}, '时长 (h)'), durationInput),
+    el('div', { class: 'form-row' }, el('label', {}, '时长 (h)'), el('div', {}, durationInput, durationHint)),
     el('div', { class: 'form-row' }, el('label', {}, '平均心率'), hrInput),
     el('div', { class: 'form-row' }, el('label', {}, '最大心率'), maxHrInput),
     el('div', { class: 'form-row' }, el('label', {}, '感受'), feltSel),
@@ -303,6 +335,7 @@ function openAddActivity(activity = null) {
 
     const sportData = {};
     if (sport === 'running') {
+      if (paceInput.value.trim()) sportData.avg_pace = normalizePaceForSave(paceInput.value.trim());
       if (cadenceInput.value) sportData.cadence = Number(cadenceInput.value);
       if (strideInput.value) sportData.stride_length_m = Number(strideInput.value);
     } else if (sport === 'hiking') {

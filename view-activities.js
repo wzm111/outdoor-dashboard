@@ -97,7 +97,7 @@ const SPORT_TABLE_COLUMNS = {
         td(routeText, 'col-location'),
         td(num(a.distance_km, 2) + ' km', 'num'),
         td(fmtDuration(a.duration_hours), 'num'),
-        td(paceMinPerKm(a.distance_km, a.duration_hours) || '—', 'num'),
+        td(a.avg_pace || paceMinPerKm(a.distance_km, a.duration_hours) || '—', 'num'),
         td(a.avg_hr ? num(a.avg_hr, 0) : '—', 'num'),
         td(a.cadence ? num(a.cadence, 0) : '—', 'num'),
         td(feltStars(a.felt)),
@@ -317,7 +317,7 @@ function openActivityDetail(activity, gearMap) {
   if (activity.duration_hours != null) addStat('时长', fmtDuration(activity.duration_hours));
 
   if (sport === 'running') {
-    addStat('配速', paceMinPerKm(activity.distance_km, activity.duration_hours) || '—');
+    addStat('配速', activity.avg_pace || paceMinPerKm(activity.distance_km, activity.duration_hours) || '—');
     if (activity.cadence) addStat('步频', activity.cadence + ' spm');
     if (activity.stride_length_m) addStat('步幅', num(activity.stride_length_m, 2) + ' m');
   } else if (sport === 'hiking') {

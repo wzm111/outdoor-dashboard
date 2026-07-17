@@ -384,6 +384,42 @@ function paceMinPerKm(distanceKm, hours) {
   return `${m}:${String(s).padStart(2, '0')}/km`;
 }
 
+/** 把配速字符串解析为分钟/公里。支持 "5:55"、"5分55秒"、"5'55\""、"5.55"/km 等。 */
+function parsePaceToMinPerKm(pace) {
+  if (pace == null || pace === '') return null;
+  const s = String(pace).trim().replace(/\s*\/km$/i, '');
+  // 5:55 / 5'55" / 5′55″ / 5分55秒
+  const colon = s.match(/^(\d+)[':分′](\d+)\s*(?:秒|″|"|')?$/);
+  if (colon) {
+    const m = Number(colon[1]);
+    const sec = Number(colon[2]);
+    if (sec >= 60) return null;
+    return m + sec / 60;
+  }
+  // 纯数字视为分钟/公里（如 "5.92"）
+  const num = Number(s);
+  if (!isNaN(num) && num > 0) return num;
+  return null;
+}
+
+/** 由距离和配速计算时长（小时）。 */
+function paceToDurationHours(distanceKm, pace) {
+  const d = Number(distanceKm);
+  const p = parsePaceToMinPerKm(pace);
+  if (!d || d <= 0 || !p || p <= 0) return null;
+  return Math.round(((d * p) / 60) * 100) / 100;
+}
+
+/** 规范化配速输入为 "M:SS/km" 存储形式；无法解析时返回原文。 */
+function normalizePaceForSave(pace) {
+  if (pace == null || pace === '') return undefined;
+  const p = parsePaceToMinPerKm(pace);
+  if (!p || p <= 0) return String(pace).trim() || undefined;
+  const m = Math.floor(p);
+  const s = Math.round((p - m) * 60);
+  return `${m}:${String(s).padStart(2, '0')}/km`;
+}
+
 /** 判断活动是否为跑步。 */
 function isRunning(a) {
   return /run|跑步|配速/i.test(String(a.type || ''));

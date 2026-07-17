@@ -495,7 +495,7 @@ function routeActivityRow(a, bestDuration, gearMap) {
     a.distance_km != null ? num(a.distance_km) + ' km' : null,
     a.elevation_gain_m != null ? num(a.elevation_gain_m, 0) + ' m' : null,
     a.duration_hours != null ? fmtDuration(a.duration_hours) : null,
-    paceMinPerKm(a.distance_km, a.duration_hours),
+    a.avg_pace || paceMinPerKm(a.distance_km, a.duration_hours),
     a.felt ? `感受:${a.felt}` : null,
   ].filter(Boolean);
   info.appendChild(el('div', { class: 'rel-brief' }, parts.join(' · ') || '—'));

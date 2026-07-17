@@ -126,7 +126,7 @@ function renderAssistant() {
       messages[idx] = {
         id: messageId,
         role: 'assistant',
-        content: `✅ ${result.message}\n\n${action.preview || ''}`,
+        content: `${result.queued ? '📥' : '✅'} ${result.message}\n\n${action.preview || ''}`,
         time: new Date().toISOString(),
       };
       saveChatHistory(messages);

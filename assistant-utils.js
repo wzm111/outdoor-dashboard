@@ -489,7 +489,8 @@ async function executeProposedAction(action) {
     }
     const payload = { ...data };
     delete payload.date;
-    await fetchSaveBody(state.apiUrl, state.token, data.date, payload, buildBodyMarkdown(data));
+    const res = await fetchSaveBody(state.apiUrl, state.token, data.date, payload, buildBodyMarkdown(data));
+    if (res && res.queued) return { ok: true, queued: true, message: '身体日志已加入离线队列，联网后自动同步' };
     return { ok: true, message: '身体日志已保存' };
   }
 
@@ -513,7 +514,8 @@ async function executeProposedAction(action) {
       data: activityData,
       raw_markdown: buildActivityMarkdown(activityData),
     };
-    await fetchSaveActivity(state.apiUrl, state.token, payload);
+    const res = await fetchSaveActivity(state.apiUrl, state.token, payload);
+    if (res && res.queued) return { ok: true, queued: true, message: '活动记录已加入离线队列，联网后自动同步' };
     return { ok: true, message: '活动记录已保存' };
   }
 
@@ -528,11 +530,13 @@ async function executeProposedAction(action) {
     delete planData._recommend;
     const localExisting = findLocalConflict('plan', planData);
     const payload = { data: planData, raw_markdown: buildPlanMarkdown(planData) };
+    let res;
     if (localExisting && localExisting.id) {
-      await fetchUpdatePlan(state.apiUrl, state.token, localExisting.id, payload);
+      res = await fetchUpdatePlan(state.apiUrl, state.token, localExisting.id, payload);
     } else {
-      await fetchSavePlan(state.apiUrl, state.token, payload);
+      res = await fetchSavePlan(state.apiUrl, state.token, payload);
     }
+    if (res && res.queued) return { ok: true, queued: true, message: '行程计划已加入离线队列，联网后自动同步' };
     return { ok: true, message: '行程计划已保存' };
   }
 
