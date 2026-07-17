@@ -162,6 +162,7 @@ function renderAll() {
   renderPlans();
   renderReports();
   renderTraining();
+  renderRunning();
   renderRecovery();
   renderAssistant();
   const d = state.data;
@@ -185,8 +186,8 @@ async function clearCacheAndReload() {
 }
 
 const DEFAULT_VIEW = 'overview';
-const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports', 'training', 'recovery', 'assistant'];
-const MORE_VIEWS = ['routes', 'plans', 'reports', 'training', 'recovery', 'assistant'];
+const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports', 'training', 'running', 'recovery', 'assistant'];
+const MORE_VIEWS = ['routes', 'plans', 'reports', 'training', 'running', 'recovery', 'assistant'];
 
 /** 从 URL hash 解析当前视图，非法或空时回退到总览。 */
 function viewFromHash() {
