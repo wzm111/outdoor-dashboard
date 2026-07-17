@@ -373,6 +373,35 @@ function fmtDuration(hours) {
   return `${m}:${pad(s)}`;
 }
 
+/** 把用户输入的时长解析为小时。支持 "29:38"、"1:30:00"、"29分38秒"、"1小时30分"、"1.5h"、纯数字（小时）。 */
+function parseDurationToHours(str) {
+  if (str == null || str === '') return null;
+  const s = String(str).trim();
+  if (!s) return null;
+  // H:MM:SS 或 MM:SS
+  const colon = s.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (colon) {
+    const a = Number(colon[1]);
+    const b = Number(colon[2]);
+    const c = colon[3] != null ? Number(colon[3]) : null;
+    if (b >= 60 || (c != null && c >= 60)) return null;
+    const sec = c != null ? a * 3600 + b * 60 + c : a * 60 + b;
+    return sec / 3600;
+  }
+  // 中文/单位组合：1小时30分 / 1h30m / 29分38秒 / 90秒
+  const unit = s.match(/^(?:(\d+(?:\.\d+)?)\s*(?:小时|h))?\s*(?:(\d+(?:\.\d+)?)\s*(?:分钟|分|min|m))?\s*(?:(\d+(?:\.\d+)?)\s*(?:秒钟|秒|s))?$/i);
+  if (unit && (unit[1] != null || unit[2] != null || unit[3] != null)) {
+    const h = Number(unit[1] || 0);
+    const m = Number(unit[2] || 0);
+    const sec = Number(unit[3] || 0);
+    return h + m / 60 + sec / 3600;
+  }
+  // 纯数字按小时（兼容旧习惯）
+  const n = Number(s);
+  if (!isNaN(n) && n >= 0) return n;
+  return null;
+}
+
 /** 计算配速（分钟/公里）。 */
 function paceMinPerKm(distanceKm, hours) {
   const d = Number(distanceKm);

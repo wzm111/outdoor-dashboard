@@ -28,7 +28,7 @@ function openAddActivity(activity = null) {
   const distInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.distance_km != null ? activity.distance_km : '', step: '0.01', placeholder: '公里', style: 'width:100%;' });
   const gainInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.elevation_gain_m != null ? activity.elevation_gain_m : '', placeholder: '米', style: 'width:100%;' });
   const lossInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.elevation_loss_m != null ? activity.elevation_loss_m : '', placeholder: '米（可选）', style: 'width:100%;' });
-  const durationInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.duration_hours != null ? activity.duration_hours : '', step: '0.01', placeholder: '小时', style: 'width:100%;' });
+  const durationInput = el('input', { type: 'text', class: 'gear-select', value: activity && activity.duration_hours != null ? fmtDuration(activity.duration_hours) : '', placeholder: '如 29:38 / 1:30:00 / 1.5（小时）', style: 'width:100%;' });
   const hrInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.avg_hr != null ? activity.avg_hr : '', placeholder: '次/分', style: 'width:100%;' });
   const maxHrInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.max_hr != null ? activity.max_hr : '', placeholder: '次/分', style: 'width:100%;' });
   const feltSel = el('select', { class: 'gear-select', style: 'width:100%;' },
@@ -145,21 +145,26 @@ function openAddActivity(activity = null) {
   // 配速/距离/时长联动：时长为空时由距离+配速自动补全；配速为空时由距离+时长反推
   const durationHint = el('div', { style: 'font-size:12px; color:var(--text-dim); margin-top:2px;' }, '');
   function refreshDurationHint() {
-    const v = durationInput.value ? Number(durationInput.value) : null;
-    durationHint.textContent = v ? `≈ ${fmtDuration(v)}` : '';
+    const h = parseDurationToHours(durationInput.value);
+    durationHint.textContent = h != null && h > 0 ? `≈ ${fmtDuration(h)}（${num(h, 2)} 小时）` : '';
+  }
+  function normalizeDurationInput() {
+    const h = parseDurationToHours(durationInput.value);
+    if (h != null && h > 0) durationInput.value = fmtDuration(h);
+    refreshDurationHint();
   }
   function autoDurationFromPace() {
     const dist = distInput.value ? Number(distInput.value) : null;
     if (!dist || durationInput.value) return;
     const h = paceToDurationHours(dist, paceInput.value);
     if (h) {
-      durationInput.value = String(h);
+      durationInput.value = fmtDuration(h);
       refreshDurationHint();
     }
   }
   function autoPaceFromDuration() {
     const dist = distInput.value ? Number(distInput.value) : null;
-    const dur = durationInput.value ? Number(durationInput.value) : null;
+    const dur = parseDurationToHours(durationInput.value);
     if (!dist || !dur || paceInput.value) return;
     const p = paceMinPerKm(dist, dur);
     if (p) paceInput.value = p.replace(/\s*\/km$/i, '');
@@ -167,7 +172,7 @@ function openAddActivity(activity = null) {
   paceInput.addEventListener('change', autoDurationFromPace);
   distInput.addEventListener('change', autoDurationFromPace);
   durationInput.addEventListener('input', refreshDurationHint);
-  durationInput.addEventListener('change', autoPaceFromDuration);
+  durationInput.addEventListener('change', () => { normalizeDurationInput(); autoPaceFromDuration(); });
   refreshDurationHint();
   // 编辑旧记录时无配速但有距离+时长 → 预填配速
   if (activity && !activity.avg_pace) autoPaceFromDuration();
@@ -271,7 +276,7 @@ function openAddActivity(activity = null) {
     el('div', { class: 'form-row' }, el('label', {}, '距离 (km) *'), distInput),
     el('div', { class: 'form-row' }, el('label', {}, '爬升 (m)'), gainInput),
     el('div', { class: 'form-row' }, el('label', {}, '下降 (m)'), lossInput),
-    el('div', { class: 'form-row' }, el('label', {}, '时长 (h)'), el('div', {}, durationInput, durationHint)),
+    el('div', { class: 'form-row' }, el('label', {}, '时长'), el('div', {}, durationInput, durationHint)),
     el('div', { class: 'form-row' }, el('label', {}, '平均心率'), hrInput),
     el('div', { class: 'form-row' }, el('label', {}, '最大心率'), maxHrInput),
     el('div', { class: 'form-row' }, el('label', {}, '感受'), feltSel),
@@ -309,6 +314,16 @@ function openAddActivity(activity = null) {
       toast('请填写有效距离', 'warn');
       return;
     }
+    // 时长：支持 29:38 / 1:30:00 / 29分38秒 / 1.5（小时）等自然格式
+    let durationHours;
+    if (durationInput.value.trim()) {
+      const parsed = parseDurationToHours(durationInput.value);
+      if (parsed == null || parsed <= 0) {
+        toast('时长格式不正确，支持 29:38 / 1:30:00 / 29分38秒 / 1.5（小时）', 'warn');
+        return;
+      }
+      durationHours = Math.round(parsed * 10000) / 10000;
+    }
     // 以旧记录为基础合并，避免丢失其他运动的旧字段
     const base = activity ? { ...activity } : {};
     delete base._raw_markdown;
@@ -324,7 +339,7 @@ function openAddActivity(activity = null) {
       distance_km: distance,
       elevation_gain_m: gainInput.value ? Number(gainInput.value) : undefined,
       elevation_loss_m: lossInput.value ? Number(lossInput.value) : undefined,
-      duration_hours: durationInput.value ? Number(durationInput.value) : undefined,
+      duration_hours: durationHours,
       avg_hr: hrInput.value ? Number(hrInput.value) : undefined,
       max_hr: maxHrInput.value ? Number(maxHrInput.value) : undefined,
       felt: feltSel.value || undefined,
