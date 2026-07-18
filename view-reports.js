@@ -9,6 +9,8 @@ function formatLocalDate(d) {
   return `${y}-${m}-${day}`;
 }
 
+let lastHistoricalReportType = 'week';
+
 // ---------- 报告中心 ----------
 
 function renderReports() {
@@ -1264,7 +1266,7 @@ function renderReportDetailModal(report) {
     if (!confirm('确定删除这份报告？')) return;
     try {
       const res = await fetchDelete(state.apiUrl, state.token, 'reports', report.id);
-      if (!res.ok && !res.queued) throw new Error(res.error || '删除失败');
+      if (res && res.error && !res.queued) throw new Error(res.error || '删除失败');
       state.data.reports = (state.data.reports || []).filter((r) => String(r.id) !== String(report.id));
       saveSnapshot();
       renderReports();
@@ -1285,9 +1287,9 @@ function renderHistoricalReportsSection() {
   ));
 
   const typeSelector = el('div', { class: 'report-type-selector', style: 'display:flex;gap:8px;' });
-  let currentType = 'week';
-  const weekBtn = el('button', { class: 'btn btn-sm active', 'data-type': 'week' }, '周报');
-  const monthBtn = el('button', { class: 'btn btn-sm', 'data-type': 'month' }, '月报');
+  let currentType = lastHistoricalReportType;
+  const weekBtn = el('button', { class: 'btn btn-sm' + (currentType === 'week' ? ' active' : ''), 'data-type': 'week' }, '周报');
+  const monthBtn = el('button', { class: 'btn btn-sm' + (currentType === 'month' ? ' active' : ''), 'data-type': 'month' }, '月报');
   typeSelector.appendChild(weekBtn);
   typeSelector.appendChild(monthBtn);
   section.appendChild(typeSelector);
@@ -1351,6 +1353,7 @@ function renderHistoricalReportsSection() {
 
   function setType(type) {
     currentType = type;
+    lastHistoricalReportType = type;
     weekBtn.classList.toggle('active', type === 'week');
     monthBtn.classList.toggle('active', type === 'month');
     dateInput.value = defaultDate(type);
