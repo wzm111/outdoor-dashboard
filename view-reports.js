@@ -1185,14 +1185,14 @@ function buildReportMarkdown(summaryObj, reportType, start, end) {
   if (avgSleep != null) lines.push(`- 平均睡眠：${avgSleep.toFixed(1)} h`);
   if (avgFatigue != null) lines.push(`- 平均疲劳：${avgFatigue.toFixed(1)}`);
 
-  if (summary.typeBreakdown.length) {
+  if (summary.typeBreakdown && summary.typeBreakdown.length) {
     lines.push('', '## 活动类型分布');
     for (const t of summary.typeBreakdown) {
       lines.push(`- ${activityTypeLabel(t.type)}：${t.count} 次`);
     }
   }
 
-  if (summary.topRoutes.length) {
+  if (summary.topRoutes && summary.topRoutes.length) {
     lines.push('', '## 常用路线');
     for (const r of summary.topRoutes) {
       lines.push(`- ${r.route}：${r.count} 次`);
