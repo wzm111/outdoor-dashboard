@@ -1408,7 +1408,7 @@ function renderHistoricalReportsSection() {
     }
   });
 
-  setType('week');
+  setType(lastHistoricalReportType);
   return section;
 }
 
