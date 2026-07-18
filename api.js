@@ -12,7 +12,7 @@ function apiBase(url) {
 /** 从当前 state.data 中读取某条记录的客户端 _updated_at，用于乐观锁冲突检测。 */
 function getExpectedUpdatedAt(entity, keyValue) {
   if (!state.data || keyValue == null) return undefined;
-  const key = entity === 'plans' || entity === 'activities' ? 'id' : entity === 'body' ? 'date' : 'slug';
+  const key = entity === 'plans' || entity === 'activities' || entity === 'reports' ? 'id' : entity === 'body' ? 'date' : 'slug';
   const arrKey = entity === 'body' ? 'body_logs' : entity;
   const arr = state.data[arrKey];
   if (!Array.isArray(arr)) return undefined;
@@ -59,7 +59,7 @@ async function fetchDelete(apiUrl, token, entity, id) {
       const key = entity === 'body' ? 'body_logs' : entity;
       const arr = state.data[key];
       if (!Array.isArray(arr)) return;
-      const pk = entity === 'plans' ? 'id' : entity === 'body' ? 'date' : 'slug';
+      const pk = entity === 'plans' || entity === 'reports' ? 'id' : entity === 'body' ? 'date' : 'slug';
       state.data[key] = arr.filter((item) => String(item[pk]) !== String(id));
       renderAll();
       saveSnapshot();
@@ -393,6 +393,65 @@ async function fetchSavePlan(apiUrl, token, payload) {
       else state.data.plans.push(merged);
       state.data.plans.sort((a, b) => String(b.date).localeCompare(String(a.date)));
       renderPlans();
+      saveSnapshot();
+    },
+  });
+}
+
+/** 保存报告：POST /reports */
+async function fetchSaveReport(apiUrl, token, payload) {
+  const url = `${apiBase(apiUrl)}/reports`;
+  const tempId = 'offline-report-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+  const options = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '保存报告',
+    optimistic: () => {
+      const merged = { id: tempId, ...payload.data, _raw_markdown: payload.raw_markdown };
+      const reports = state.data.reports || [];
+      reports.push(merged);
+      state.data.reports = reports.sort((a, b) => String(b.period_key).localeCompare(String(a.period_key)));
+      renderReports();
+      saveSnapshot();
+    },
+  });
+}
+
+/** 更新报告：PUT /reports/:id */
+async function fetchUpdateReport(apiUrl, token, id, payload) {
+  const url = `${apiBase(apiUrl)}/reports/${encodeURIComponent(id)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('reports', id);
+  const options = {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ ...payload, expected_updated_at: expectedUpdatedAt }),
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '更新报告',
+    expectedUpdatedAt,
+    optimistic: () => {
+      const reports = state.data.reports || [];
+      const idx = reports.findIndex((r) => String(r.id) === String(id));
+      if (idx >= 0) {
+        reports[idx] = { ...reports[idx], ...payload.data, _raw_markdown: payload.raw_markdown };
+        state.data.reports = reports;
+      }
+      renderReports();
       saveSnapshot();
     },
   });

@@ -31,6 +31,7 @@ async function loadAndRender(isRefresh = false) {
     (Array.isArray(cached.body_logs) && cached.body_logs.length > 0) ||
     (Array.isArray(cached.plans) && cached.plans.length > 0) ||
     (Array.isArray(cached.segments) && cached.segments.length > 0) ||
+    (Array.isArray(cached.reports) && cached.reports.length > 0) ||
     cached.profile != null
   );
   const canIncremental = !!hasCachedData && !!meta && !!meta.lastSyncAt && meta.schemaVersion === window.__APP_VERSION;
@@ -70,6 +71,7 @@ async function loadAndRender(isRefresh = false) {
           body_logs: unwrapList(raw.body_logs),
           plans: unwrapList(raw.plans),
           segments: unwrapList(raw.segments),
+          reports: unwrapList(raw.reports),
         };
       }
     } else {
@@ -81,6 +83,7 @@ async function loadAndRender(isRefresh = false) {
         body_logs: unwrapList(raw.body_logs),
         plans: unwrapList(raw.plans),
         segments: unwrapList(raw.segments),
+        reports: unwrapList(raw.reports),
       };
     }
 
@@ -141,6 +144,7 @@ function applySyncDelta(currentData, delta) {
   result.body_logs = upsertByKey(result.body_logs, delta.body_logs, (b) => b.date);
   result.plans = upsertByKey(result.plans, delta.plans, (p) => p.id);
   result.segments = upsertByKey(result.segments, delta.segments, (s) => s.slug);
+  result.reports = upsertByKey(result.reports, delta.reports, (r) => r.id);
 
   const deleted = delta.deleted || {};
   result.gear = removeByKey(result.gear, deleted.gear, (g) => g.slug);
@@ -149,6 +153,7 @@ function applySyncDelta(currentData, delta) {
   result.body_logs = removeByKey(result.body_logs, deleted.body_logs, (b) => b.date);
   result.plans = removeByKey(result.plans, deleted.plans, (p) => p.id);
   result.segments = removeByKey(result.segments, deleted.segments, (s) => s.slug);
+  result.reports = removeByKey(result.reports, deleted.reports, (r) => r.id);
 
   return result;
 }
@@ -168,7 +173,8 @@ function renderAll() {
   const d = state.data;
   $('#data-meta').textContent =
     `装备 ${d.gear.length} · 路线 ${d.routes.length} · 活动 ${d.activities.length} · ` +
-    `身体记录 ${d.body_logs.length} · 计划 ${d.plans.length} · 路段 ${d.segments.length}`;
+    `身体记录 ${d.body_logs.length} · 计划 ${d.plans.length} · 路段 ${d.segments.length} · ` +
+    `报告 ${d.reports ? d.reports.length : 0}`;
 }
 
 function viewEl(name) { return $(`.view[data-view="${name}"]`); }

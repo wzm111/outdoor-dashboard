@@ -13,6 +13,9 @@ function renderReports() {
   );
   view.appendChild(header);
 
+  // 0. 历史周报/月报中心
+  view.appendChild(renderHistoricalReportsSection());
+
   const data = state.data;
   const activities = data.activities || [];
   const gear = data.gear || [];
@@ -1082,3 +1085,319 @@ function formatDuration(hours) {
   if (h > 0) return `${h}h`;
   return `${m}m`;
 }
+
+// ---------- 历史周报/月报中心 ----------
+
+function getReportPeriodKey(refDate, reportType) {
+  return getPeriodRange(refDate, reportType).start;
+}
+
+function computeWeeklyACWRForReport(activities, weekKey) {
+  const end = new Date(weekKey + 'T00:00:00');
+  end.setDate(end.getDate() + 6);
+  const start = new Date(end);
+  start.setDate(end.getDate() - 5 * 7 + 1);
+
+  const weekly = {};
+  for (const a of activities || []) {
+    const date = String(a.date);
+    if (!date || date < start.toISOString().slice(0, 10) || date > end.toISOString().slice(0, 10)) continue;
+    const d = new Date(date + 'T00:00:00');
+    const day = d.getDay();
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    const key = monday.toISOString().slice(0, 10);
+    if (!weekly[key]) weekly[key] = { distance: 0, elevation: 0, duration: 0, count: 0 };
+    weekly[key].distance += Number(a.distance_km) || 0;
+    weekly[key].elevation += Number(a.elevation_gain_m) || 0;
+    weekly[key].duration += Number(a.duration_hours) || 0;
+    weekly[key].count += 1;
+  }
+
+  const keys = Object.keys(weekly).sort();
+  if (keys.length < 2 || !weekly[weekKey]) return { ratio: 0, status: '数据不足', risk: 'unknown', acute: 0, chronic: 0 };
+
+  const acute = weekly[weekKey].distance;
+  const chronicKeys = keys.slice(0, -1).slice(-4);
+  const chronic = chronicKeys.length ? chronicKeys.reduce((s, k) => s + weekly[k].distance, 0) / chronicKeys.length : 0;
+  if (!chronic) return { ratio: 0, status: '数据不足', risk: 'unknown', acute, chronic: 0 };
+
+  const ratio = acute / chronic;
+  let status, risk;
+  if (ratio < 0.8) { status = '训练不足'; risk = 'low'; }
+  else if (ratio <= 1.3) { status = '最佳训练区'; risk = 'optimal'; }
+  else if (ratio <= 1.5) { status = '警告区（伤病风险增加）'; risk = 'warning'; }
+  else { status = '危险区（高伤病风险）'; risk = 'danger'; }
+  return { ratio, status, risk, acute, chronic };
+}
+
+function computeReportSummary(data, reportType, refDate) {
+  const range = getPeriodRange(refDate, reportType);
+  const { start, end } = range;
+  const activities = data.activities || [];
+  const bodyLogs = data.body_logs || [];
+  const summary = computePeriodSummary(activities, start, end);
+
+  const periodBodyLogs = bodyLogs.filter((b) => b.date >= start && b.date <= end);
+  const sleepValues = periodBodyLogs.map((b) => Number(b.sleep_hours)).filter((v) => !isNaN(v));
+  const fatigueValues = periodBodyLogs.map((b) => Number(b.fatigue)).filter((v) => !isNaN(v));
+  const avgSleep = sleepValues.length ? sleepValues.reduce((s, v) => s + v, 0) / sleepValues.length : null;
+  const avgFatigue = fatigueValues.length ? fatigueValues.reduce((s, v) => s + v, 0) / fatigueValues.length : null;
+
+  const acwr = reportType === 'week' ? computeWeeklyACWRForReport(activities, start) : null;
+  const fatigue = computeFatigueScore(periodBodyLogs);
+
+  return {
+    reportType,
+    periodKey: start,
+    start,
+    end,
+    summary,
+    acwr,
+    fatigue,
+    avgSleep,
+    avgFatigue,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function buildReportMarkdown(summaryObj, reportType, start, end) {
+  const { summary, acwr, fatigue, avgSleep, avgFatigue } = summaryObj;
+  const typeLabel = reportType === 'week' ? '周报' : '月报';
+  const lines = [
+    `# ${start} ~ ${end} 训练${typeLabel}`,
+    '',
+    '## 核心数据',
+    `- 活动次数：${summary.count} 次`,
+    `- 总距离：${summary.distance.toFixed(1)} km`,
+    `- 总爬升：${summary.elevation.toFixed(0)} m`,
+    `- 总时长：${formatDuration(summary.duration)}`,
+  ];
+
+  if (avgSleep != null) lines.push(`- 平均睡眠：${avgSleep.toFixed(1)} h`);
+  if (avgFatigue != null) lines.push(`- 平均疲劳：${avgFatigue.toFixed(1)}`);
+
+  if (summary.typeBreakdown.length) {
+    lines.push('', '## 活动类型分布');
+    for (const t of summary.typeBreakdown) {
+      lines.push(`- ${activityTypeLabel(t.type)}：${t.count} 次`);
+    }
+  }
+
+  if (summary.topRoutes.length) {
+    lines.push('', '## 常用路线');
+    for (const r of summary.topRoutes) {
+      lines.push(`- ${r.route}：${r.count} 次`);
+    }
+  }
+
+  if (acwr && acwr.ratio) {
+    lines.push('', '## 训练负荷（ACWR）');
+    lines.push(`- 比值：${acwr.ratio.toFixed(2)}（${acwr.status}）`);
+    lines.push(`- 急性负荷：${acwr.acute.toFixed(1)} km，慢性负荷：${acwr.chronic.toFixed(1)} km`);
+  }
+
+  if (fatigue && fatigue.score) {
+    lines.push('', '## 恢复状态');
+    lines.push(`- 疲劳评分：${fatigue.score.toFixed(0)} 分（${fatigue.status}）`);
+  }
+
+  const advice = [];
+  if (acwr && acwr.risk === 'danger') advice.push('本周训练负荷突增，建议下周主动安排恢复日，避免连续高强度输出。');
+  else if (acwr && acwr.risk === 'warning') advice.push('训练负荷进入警告区，注意监控身体反馈，必要时减量。');
+  else if (acwr && acwr.risk === 'low' && summary.count > 0) advice.push('本周训练负荷较低，如身体状态良好可适当增加有氧量。');
+  if (avgSleep != null && avgSleep < 6) advice.push('平均睡眠不足 6 小时，恢复质量可能受影响，建议优先保证睡眠。');
+  if (avgFatigue != null && avgFatigue >= 6) advice.push('平均疲劳偏高，建议安排恢复跑或休息日。');
+
+  if (advice.length) {
+    lines.push('', '## 建议');
+    for (const a of advice) lines.push(`- ${a}`);
+  }
+
+  lines.push('', `*生成于 ${new Date().toLocaleString('zh-CN')}*`);
+  return lines.join('\n');
+}
+
+function renderReportDetailModal(report) {
+  const summary = report.data?.summary || report.summary || {};
+  const acwr = report.data?.acwr || report.acwr || null;
+  const fatigue = report.data?.fatigue || report.fatigue || null;
+  const avgSleep = report.data?.avgSleep != null ? report.data.avgSleep : report.avgSleep;
+  const avgFatigue = report.data?.avgFatigue != null ? report.data.avgFatigue : report.avgFatigue;
+
+  const content = el('div', {});
+  const grid = el('div', { class: 'reports-grid two' });
+  grid.appendChild(reportStatCard('距离', (summary.distance || 0).toFixed(1), 'km'));
+  grid.appendChild(reportStatCard('活动', String(summary.count || 0), '次'));
+  grid.appendChild(reportStatCard('爬升', (summary.elevation || 0).toFixed(0), 'm'));
+  grid.appendChild(reportStatCard('时长', formatDuration(summary.duration || 0), ''));
+  content.appendChild(grid);
+
+  if (avgSleep != null || avgFatigue != null) {
+    const bodyGrid = el('div', { class: 'reports-grid two', style: 'margin-top:12px;' });
+    if (avgSleep != null) bodyGrid.appendChild(reportStatCard('平均睡眠', avgSleep.toFixed(1), 'h'));
+    if (avgFatigue != null) bodyGrid.appendChild(reportStatCard('平均疲劳', avgFatigue.toFixed(1), ''));
+    content.appendChild(bodyGrid);
+  }
+
+  if (acwr && acwr.ratio) {
+    content.appendChild(el('div', { class: 'report-hint', style: 'margin-top:12px;' }, `ACWR：${acwr.ratio.toFixed(2)}（${acwr.status}）`));
+  }
+  if (fatigue && fatigue.score) {
+    content.appendChild(el('div', { class: 'report-hint' }, `疲劳评分：${fatigue.score.toFixed(0)} 分（${fatigue.status}）`));
+  }
+
+  const mdWrap = el('div', { class: 'markdown-body', style: 'margin-top:16px;' });
+  mdWrap.innerHTML = renderMarkdown(report.raw_markdown || buildReportMarkdown(report.data || report, report.report_type, report.start_date, report.end_date));
+  content.appendChild(mdWrap);
+
+  const deleteBtn = el('button', { class: 'btn btn-danger btn-sm', 'data-no-autoclose': '' }, '删除');
+  deleteBtn.addEventListener('click', async () => {
+    if (!confirm('确定删除这份报告？')) return;
+    try {
+      const res = await fetchDelete(state.apiUrl, state.token, 'reports', report.id);
+      if (!res.ok && !res.queued) throw new Error(res.error || '删除失败');
+      state.data.reports = (state.data.reports || []).filter((r) => String(r.id) !== String(report.id));
+      saveSnapshot();
+      renderReports();
+      toast(res.queued ? '已加入离线删除队列' : '报告已删除', 'success');
+    } catch (err) {
+      toast(err.message || '删除失败', 'error');
+    }
+  });
+
+  showModal(`${report.start_date} ~ ${report.end_date} ${report.report_type === 'week' ? '周报' : '月报'}`, content, [deleteBtn]);
+}
+
+function renderHistoricalReportsSection() {
+  const section = el('div', { class: 'report-card' });
+  section.appendChild(el('div', { class: 'section-title', style: 'margin-bottom:12px;' },
+    el('span', {}, '历史周报/月报'),
+    el('span', { class: 'text-dim' }, '持久化存储，跨设备同步')
+  ));
+
+  const typeSelector = el('div', { class: 'report-type-selector', style: 'display:flex;gap:8px;' });
+  let currentType = 'week';
+  const weekBtn = el('button', { class: 'btn btn-sm active', 'data-type': 'week' }, '周报');
+  const monthBtn = el('button', { class: 'btn btn-sm', 'data-type': 'month' }, '月报');
+  typeSelector.appendChild(weekBtn);
+  typeSelector.appendChild(monthBtn);
+  section.appendChild(typeSelector);
+
+  const pickerWrap = el('div', { class: 'report-picker', style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0;' });
+  const dateInput = el('input', { type: 'date', class: 'form-input' });
+  const generateBtn = el('button', { class: 'btn btn-primary btn-sm' }, '生成');
+  pickerWrap.appendChild(el('span', { class: 'text-dim' }, '选择周期内任意一天：'));
+  pickerWrap.appendChild(dateInput);
+  pickerWrap.appendChild(generateBtn);
+  section.appendChild(pickerWrap);
+
+  const listContainer = el('div', { class: 'historical-reports-list' });
+  section.appendChild(listContainer);
+
+  function defaultDate(type) {
+    const today = new Date();
+    if (type === 'week') {
+      const day = today.getDay();
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1) - 7);
+      return monday.toISOString().slice(0, 10);
+    }
+    const first = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    return first.toISOString().slice(0, 10);
+  }
+
+  function refreshList() {
+    listContainer.innerHTML = '';
+    const reports = (state.data.reports || [])
+      .filter((r) => r.report_type === currentType)
+      .sort((a, b) => String(b.period_key).localeCompare(String(a.period_key)));
+
+    if (!reports.length) {
+      listContainer.appendChild(el('div', { class: 'empty' }, `还没有${currentType === 'week' ? '周报' : '月报'}，选择日期后生成`));
+      return;
+    }
+
+    const grid = el('div', { class: 'reports-grid two' });
+    for (const r of reports.slice(0, 12)) {
+      const summary = r.data?.summary || r.summary || {};
+      const updatedAt = r._updated_at || r.updated_at;
+      const existsText = updatedAt ? `更新于 ${fmtDate(updatedAt)}` : '';
+      const card = el('div', { class: 'stat-card historical-report-card', style: 'cursor:pointer;' });
+      card.appendChild(el('div', { class: 'period-header' },
+        el('span', { class: 'period-label' }, `${r.start_date} ~ ${r.end_date}`),
+        el('span', { class: 'period-dates' }, currentType === 'week' ? '周报' : '月报')
+      ));
+      const metrics = el('div', { class: 'reports-grid two', style: 'margin-top:8px;' });
+      metrics.appendChild(reportStatCard('距离', (summary.distance || 0).toFixed(1), 'km'));
+      metrics.appendChild(reportStatCard('活动', String(summary.count || 0), '次'));
+      card.appendChild(metrics);
+      if (existsText) {
+        card.appendChild(el('div', { class: 'text-dim', style: 'margin-top:8px;font-size:12px;' }, existsText));
+      }
+      card.addEventListener('click', () => renderReportDetailModal(r));
+      grid.appendChild(card);
+    }
+    listContainer.appendChild(grid);
+  }
+
+  function setType(type) {
+    currentType = type;
+    weekBtn.classList.toggle('active', type === 'week');
+    monthBtn.classList.toggle('active', type === 'month');
+    dateInput.value = defaultDate(type);
+    refreshList();
+  }
+
+  weekBtn.addEventListener('click', () => setType('week'));
+  monthBtn.addEventListener('click', () => setType('month'));
+
+  generateBtn.addEventListener('click', async () => {
+    const ref = dateInput.value || defaultDate(currentType);
+    const periodKey = getReportPeriodKey(ref, currentType);
+    const existing = (state.data.reports || []).find((r) => r.report_type === currentType && r.period_key === periodKey);
+
+    const summaryObj = computeReportSummary(state.data, currentType, ref);
+    const markdown = buildReportMarkdown(summaryObj, currentType, summaryObj.start, summaryObj.end);
+    const payload = {
+      data: {
+        report_type: currentType,
+        period_key: summaryObj.periodKey,
+        start_date: summaryObj.start,
+        end_date: summaryObj.end,
+        summary: summaryObj.summary,
+        acwr: summaryObj.acwr,
+        fatigue: summaryObj.fatigue,
+        avgSleep: summaryObj.avgSleep,
+        avgFatigue: summaryObj.avgFatigue,
+        generatedAt: summaryObj.generatedAt,
+      },
+      raw_markdown: markdown,
+    };
+
+    try {
+      const res = existing
+        ? await fetchUpdateReport(state.apiUrl, state.token, existing.id, payload)
+        : await fetchSaveReport(state.apiUrl, state.token, payload);
+      if (!res.ok && !res.queued) throw new Error(res.error || '保存失败');
+
+      if (!res.queued) {
+        const merged = unwrap(res);
+        const reports = state.data.reports || [];
+        const idx = reports.findIndex((r) => r.report_type === currentType && r.period_key === summaryObj.periodKey);
+        if (idx >= 0) reports[idx] = merged;
+        else reports.push(merged);
+        state.data.reports = reports.sort((a, b) => String(b.period_key).localeCompare(String(a.period_key)));
+        saveSnapshot();
+        renderReports();
+      }
+      toast(existing ? '报告已更新' : '报告已生成', 'success');
+    } catch (err) {
+      toast(err.message || '生成失败', 'error');
+    }
+  });
+
+  setType('week');
+  return section;
+}
+

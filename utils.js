@@ -329,6 +329,10 @@ function unwrap(row) {
   if ('route' in row && flat.route == null) flat.route = row.route;
   if ('name' in row && flat.name == null) flat.name = row.name;
   if ('plan_type' in row) flat.plan_type = row.plan_type;
+  if ('report_type' in row) flat.report_type = row.report_type;
+  if ('period_key' in row) flat.period_key = row.period_key;
+  if ('start_date' in row) flat.start_date = row.start_date;
+  if ('end_date' in row) flat.end_date = row.end_date;
   if ('id' in row) flat.id = row.id;
   if ('sequence' in row) flat.sequence = row.sequence;
   // 保留原始 Markdown（脚本侧 _unwrap 同名约定）：写回时需回传，且要在其中同步 frontmatter 的 gear_used 块。
