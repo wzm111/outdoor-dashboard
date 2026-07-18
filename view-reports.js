@@ -1,6 +1,14 @@
 /* 报告中心视图渲染 */
 'use strict';
 
+/** 将本地 Date 对象格式化为 YYYY-MM-DD，避免 toISOString() 转到 UTC 导致日期错位。 */
+function formatLocalDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ---------- 报告中心 ----------
 
 function renderReports() {
@@ -417,10 +425,10 @@ function getPeriodRange(refDate, mode) {
     const prevEnd = new Date(prevStart);
     prevEnd.setDate(prevStart.getDate() + 6);
     return {
-      start: start.toISOString().slice(0, 10),
-      end: end.toISOString().slice(0, 10),
-      prevStart: prevStart.toISOString().slice(0, 10),
-      prevEnd: prevEnd.toISOString().slice(0, 10),
+      start: formatLocalDate(start),
+      end: formatLocalDate(end),
+      prevStart: formatLocalDate(prevStart),
+      prevEnd: formatLocalDate(prevEnd),
     };
   }
   const start = new Date(ref.getFullYear(), ref.getMonth(), 1);
@@ -428,10 +436,10 @@ function getPeriodRange(refDate, mode) {
   const prevStart = new Date(ref.getFullYear(), ref.getMonth() - 1, 1);
   const prevEnd = new Date(ref.getFullYear(), ref.getMonth(), 0);
   return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-    prevStart: prevStart.toISOString().slice(0, 10),
-    prevEnd: prevEnd.toISOString().slice(0, 10),
+    start: formatLocalDate(start),
+    end: formatLocalDate(end),
+    prevStart: formatLocalDate(prevStart),
+    prevEnd: formatLocalDate(prevEnd),
   };
 }
 
@@ -1101,12 +1109,12 @@ function computeWeeklyACWRForReport(activities, weekKey) {
   const weekly = {};
   for (const a of activities || []) {
     const date = String(a.date);
-    if (!date || date < start.toISOString().slice(0, 10) || date > end.toISOString().slice(0, 10)) continue;
+    if (!date || date < formatLocalDate(start) || date > formatLocalDate(end)) continue;
     const d = new Date(date + 'T00:00:00');
     const day = d.getDay();
     const monday = new Date(d);
     monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
-    const key = monday.toISOString().slice(0, 10);
+    const key = formatLocalDate(monday);
     if (!weekly[key]) weekly[key] = { distance: 0, elevation: 0, duration: 0, count: 0 };
     weekly[key].distance += Number(a.distance_km) || 0;
     weekly[key].elevation += Number(a.elevation_gain_m) || 0;
@@ -1301,10 +1309,10 @@ function renderHistoricalReportsSection() {
       const day = today.getDay();
       const monday = new Date(today);
       monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1) - 7);
-      return monday.toISOString().slice(0, 10);
+      return formatLocalDate(monday);
     }
     const first = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    return first.toISOString().slice(0, 10);
+    return formatLocalDate(first);
   }
 
   function refreshList() {
@@ -1379,7 +1387,7 @@ function renderHistoricalReportsSection() {
       const res = existing
         ? await fetchUpdateReport(state.apiUrl, state.token, existing.id, payload)
         : await fetchSaveReport(state.apiUrl, state.token, payload);
-      if (!res.ok && !res.queued) throw new Error(res.error || '保存失败');
+      if (res && res.error && !res.queued) throw new Error(res.error || '保存失败');
 
       if (!res.queued) {
         const merged = unwrap(res);
