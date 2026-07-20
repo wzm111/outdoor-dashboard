@@ -5,8 +5,17 @@ const CHAT_HISTORY_KEY = 'outdoor_assistant_chat_history';
 const CHAT_HISTORY_LIMIT = 50;
 const CHAT_MAX_MESSAGE_LENGTH = 2000;
 
+/** 将本地 Date 对象格式化为 YYYY-MM-DD，避免 toISOString() 转到 UTC 导致日期错位。 */
+function formatLocalDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const CHAT_QUICK_QUESTIONS = [
   { label: '本周报告', text: '生成本周训练报告。' },
+  { label: '保存本周报告', text: '保存本周报告到历史周报中心。' },
   { label: '最近状态', text: '根据我最近的数据，分析我的训练状态和身体恢复情况。' },
   { label: '本周负荷', text: '我本周的训练负荷怎么样？ACWR 是多少？' },
   { label: '推荐路线', text: '根据我的体能和最近的恢复情况，推荐一条适合本周的路线。' },
@@ -58,14 +67,14 @@ function getCurrentWeekKey() {
   const day = now.getDay();
   const monday = new Date(now);
   monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-  return monday.toISOString().slice(0, 10);
+  return formatLocalDate(monday);
 }
 
 function getWeekRange(weekKey) {
   const start = new Date(weekKey + 'T00:00:00');
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  return { start: formatLocalDate(start), end: formatLocalDate(end) };
 }
 
 function computeWeeklySummary(data) {
@@ -422,6 +431,7 @@ function renderActionCard(action, onConfirm, onCancel) {
     'activity': '活动记录',
     'plan': '行程计划',
     'batch': '批量导入',
+    'report': '历史报告',
   };
 
   const header = el('div', { class: 'chat-action-header' });
@@ -475,11 +485,74 @@ function nextActivitySequence(date, route) {
   return same.length ? Math.max(...same.map((a) => Number(a.sequence || 0))) + 1 : 0;
 }
 
+async function saveHistoricalReportAction(data, existingHint) {
+  if (typeof computeReportSummary !== 'function' || typeof buildReportMarkdown !== 'function') {
+    return { ok: false, error: '报告计算函数未加载，请切换到报告中心生成。' };
+  }
+
+  const reportType = data.report_type || 'week';
+  const periodKey = data.period_key || data.ref_date;
+  if (!periodKey) return { ok: false, error: '缺少报告周期信息' };
+
+  const summaryObj = computeReportSummary(state.data, reportType, periodKey);
+  const markdown = buildReportMarkdown(summaryObj, reportType, summaryObj.start, summaryObj.end);
+  const payload = {
+    data: {
+      report_type: reportType,
+      period_key: summaryObj.periodKey,
+      start_date: summaryObj.start,
+      end_date: summaryObj.end,
+      summary: summaryObj.summary,
+      acwr: summaryObj.acwr,
+      fatigue: summaryObj.fatigue,
+      avgSleep: summaryObj.avgSleep,
+      avgFatigue: summaryObj.avgFatigue,
+      generatedAt: summaryObj.generatedAt,
+    },
+    raw_markdown: markdown,
+  };
+
+  const reports = state.data.reports || [];
+  const existing = reports.find((r) => r.report_type === reportType && r.period_key === summaryObj.periodKey)
+    || (existingHint && existingHint.id ? existingHint : null);
+
+  try {
+    const res = existing && existing.id
+      ? await fetchUpdateReport(state.apiUrl, state.token, existing.id, payload)
+      : await fetchSaveReport(state.apiUrl, state.token, payload);
+    if (res && res.error && !res.queued) throw new Error(res.error || '保存失败');
+
+    if (!res.queued) {
+      const merged = unwrap(res);
+      const idx = reports.findIndex((r) => r.report_type === reportType && r.period_key === summaryObj.periodKey);
+      if (idx >= 0) reports[idx] = merged;
+      else reports.push(merged);
+      state.data.reports = reports.sort((a, b) => String(b.period_key).localeCompare(String(a.period_key)));
+      saveSnapshot();
+    }
+
+    const typeLabel = reportType === 'week' ? '周报' : '月报';
+    return {
+      ok: true,
+      queued: res.queued,
+      message: res.queued
+        ? `${summaryObj.periodKey} ${typeLabel}已加入离线保存队列`
+        : `${summaryObj.periodKey} ${typeLabel}已保存到历史报告中心`,
+    };
+  } catch (err) {
+    return { ok: false, error: err.message || '保存失败' };
+  }
+}
+
 async function executeProposedAction(action) {
   const { intent, action: mode, data, existing } = action;
 
   if (intent === 'batch') {
     return executeBatchAction(action);
+  }
+
+  if (intent === 'report') {
+    return saveHistoricalReportAction(data, existing);
   }
 
   if (intent === 'body') {

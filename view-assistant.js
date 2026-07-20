@@ -39,6 +39,8 @@ function renderAssistant() {
     if (!t) return 'query';
     const planSignals = ['帮我计划', '帮我规划', '计划', '规划', '安排', '推荐装备', '生成计划'];
     if (planSignals.some((w) => t.includes(w))) return 'plan';
+    const reportSignals = ['保存报告', '保存本周', '保存上周', '保存本月', '保存上月', '生成并保存', '保存到历史', '周报', '月报'];
+    if (reportSignals.some((w) => t.includes(w))) return 'report';
     const batchSignals = ['批量', '导入', '录入这些', '这些', '这几条', '多条', '历史记录'];
     if (batchSignals.some((w) => t.includes(w))) return 'batch';
     const bodySignals = ['睡眠', '疲劳', '酸痛', '膝盖', '心情', '体重', '身体', '记录身体', '身体日志', '休息', '恢复'];
@@ -247,6 +249,7 @@ function renderAssistant() {
 
     const actions = el('div', { class: 'chat-weekly-actions' });
     const detailBtn = el('button', { type: 'button', class: 'btn btn-primary btn-sm' }, '查看详细建议');
+    const saveBtn = el('button', { type: 'button', class: 'btn btn-sm' }, '保存到历史周报');
     const dismissBtn = el('button', { type: 'button', class: 'btn btn-sm' }, '知道了');
 
     detailBtn.addEventListener('click', () => {
@@ -255,6 +258,24 @@ function renderAssistant() {
       sendMessage();
       markWeeklyReportSeen();
       card.remove();
+    });
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = '保存中…';
+      const result = await saveHistoricalReportAction(
+        { report_type: 'week', period_key: summary.weekKey },
+        null
+      );
+      if (result.ok) {
+        toast(result.message, 'success');
+        markWeeklyReportSeen();
+        card.remove();
+        if (!result.queued) renderReports();
+      } else {
+        toast(result.error || '保存失败', 'error');
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存到历史周报';
+      }
     });
     dismissBtn.addEventListener('click', () => {
       markWeeklyReportSeen();
@@ -266,6 +287,7 @@ function renderAssistant() {
     });
 
     actions.appendChild(detailBtn);
+    actions.appendChild(saveBtn);
     actions.appendChild(dismissBtn);
     card.appendChild(actions);
 
