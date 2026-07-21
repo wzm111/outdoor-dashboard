@@ -3027,6 +3027,104 @@ body.modal-open {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.25);
 }
+
+/* ---------- 训练目标与周期化 v1.12.0 ---------- */
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+.goal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.goal-card:hover {
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+.goal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.goal-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.phase-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.phase-base { background: var(--info-dim); color: #bfdbfe; }
+.phase-build { background: var(--warn-dim); color: #fde68a; }
+.phase-peak { background: var(--danger-dim); color: #fecaca; }
+.phase-recovery { background: var(--accent-dim); color: #bbf7d0; }
+.goal-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.goal-progress-bar {
+  height: 8px;
+  background: var(--bg-input);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.goal-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 999px;
+  transition: width 0.4s ease;
+  min-width: 2%;
+}
+.goal-progress-text {
+  font-size: 13px;
+  color: var(--text-dim);
+  display: flex;
+  justify-content: space-between;
+}
+.goal-remaining {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.goal-remaining.goal-achieved {
+  color: var(--accent);
+  font-weight: 600;
+}
+.goal-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.goal-advice-item {
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.goal-advice-item:last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 520px) {
+  .goals-grid { grid-template-columns: 1fr; }
+  .goal-card-header { flex-direction: column; align-items: flex-start; }
+}
 .historical-reports-list .empty {
   margin-top: 12px;
 }

@@ -43,6 +43,15 @@ function renderTraining() {
   // 本月统计
   const month = computeMonthSummary(activities, today);
 
+  // 本月目标完成率
+  const todayDate = new Date();
+  const monthlyDistanceGoal = (state.data.goals || []).find((g) =>
+    g.goal_type === 'monthly_distance' &&
+    String(g.period_key) === `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-01`
+  );
+  const goalTarget = monthlyDistanceGoal ? Number(monthlyDistanceGoal.target_value) : 0;
+  const goalRate = goalTarget > 0 ? Math.min(1, month.distance / goalTarget) : null;
+
   // ---------- KPI 行 ----------
   const kpiGrid = el('div', { class: 'reports-grid three' });
 
@@ -61,6 +70,15 @@ function renderTraining() {
   const monthCard = reportStatCard('本月距离', month.distance.toFixed(1), 'km', 'month-distance');
   monthCard.appendChild(el('div', { class: 'change change-flat' }, `爬升 ${month.elevation.toFixed(0)} m`));
   kpiGrid.appendChild(monthCard);
+
+  if (goalRate != null) {
+    const goalCard = reportStatCard('月目标完成率', `${(goalRate * 100).toFixed(0)}%`, `目标 ${goalTarget.toFixed(0)} km`);
+    const goalBar = el('div', { class: 'goal-progress-bar', style: 'margin-top:8px;height:6px;' },
+      el('div', { class: 'goal-progress-fill', style: `width:${Math.round(goalRate * 100)}%` })
+    );
+    goalCard.appendChild(goalBar);
+    kpiGrid.appendChild(goalCard);
+  }
 
   view.appendChild(kpiGrid);
 

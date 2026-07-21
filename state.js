@@ -10,7 +10,7 @@ window.DEFAULT_API = DEFAULT_API;
 window.state = {
   apiUrl: '',
   token: null,
-  data: null, // { profile, gear[], routes[], activities[], body_logs[], plans[], segments[], reports[] }
+  data: null, // { profile, gear[], routes[], activities[], body_logs[], plans[], segments[], reports[], goals[] }
 };
 
 // 离线状态与队列（B2）
@@ -185,6 +185,7 @@ async function importBackup(file) {
           body: (state.data.body_logs || []).map((b) => ({ date: b.date, data: b })),
           plans: (state.data.plans || []).map((p) => ({ id: p.id, plan_type: p.plan_type || 'trip', date: p.date, route: p.route || '', data: p })),
           reports: (state.data.reports || []).map((r) => ({ id: r.id, report_type: r.report_type || 'week', period_key: r.period_key, start_date: r.start_date, end_date: r.end_date, data: r, raw_markdown: r._raw_markdown || r.raw_markdown })),
+          goals: (state.data.goals || []).map((g) => ({ id: g.id, goal_type: g.goal_type || 'monthly_distance', period_key: g.period_key, start_date: g.start_date, end_date: g.end_date, target_value: g.target_value, current_value: g.current_value, unit: g.unit, data: g, raw_markdown: g._raw_markdown || g.raw_markdown })),
         },
       };
       await fetchWithTimeout(`${apiBase(state.apiUrl)}/sync`, {

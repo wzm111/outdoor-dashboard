@@ -32,6 +32,7 @@ async function loadAndRender(isRefresh = false) {
     (Array.isArray(cached.plans) && cached.plans.length > 0) ||
     (Array.isArray(cached.segments) && cached.segments.length > 0) ||
     (Array.isArray(cached.reports) && cached.reports.length > 0) ||
+    (Array.isArray(cached.goals) && cached.goals.length > 0) ||
     cached.profile != null
   );
   const canIncremental = !!hasCachedData && !!meta && !!meta.lastSyncAt && meta.schemaVersion === window.__APP_VERSION;
@@ -72,6 +73,7 @@ async function loadAndRender(isRefresh = false) {
           plans: unwrapList(raw.plans),
           segments: unwrapList(raw.segments),
           reports: unwrapList(raw.reports),
+          goals: unwrapList(raw.goals),
         };
       }
     } else {
@@ -84,6 +86,7 @@ async function loadAndRender(isRefresh = false) {
         plans: unwrapList(raw.plans),
         segments: unwrapList(raw.segments),
         reports: unwrapList(raw.reports),
+        goals: unwrapList(raw.goals),
       };
     }
 
@@ -154,6 +157,7 @@ function applySyncDelta(currentData, delta) {
   result.plans = removeByKey(result.plans, deleted.plans, (p) => p.id);
   result.segments = removeByKey(result.segments, deleted.segments, (s) => s.slug);
   result.reports = removeByKey(result.reports, deleted.reports, (r) => r.id);
+  result.goals = removeByKey(result.goals, deleted.goals, (g) => g.id);
 
   return result;
 }
@@ -170,11 +174,12 @@ function renderAll() {
   renderRunning();
   renderRecovery();
   renderAssistant();
+  renderGoals();
   const d = state.data;
   $('#data-meta').textContent =
     `装备 ${d.gear.length} · 路线 ${d.routes.length} · 活动 ${d.activities.length} · ` +
     `身体记录 ${d.body_logs.length} · 计划 ${d.plans.length} · 路段 ${d.segments.length} · ` +
-    `报告 ${d.reports ? d.reports.length : 0}`;
+    `报告 ${d.reports ? d.reports.length : 0} · 目标 ${d.goals ? d.goals.length : 0}`;
 }
 
 function viewEl(name) { return $(`.view[data-view="${name}"]`); }
@@ -192,8 +197,8 @@ async function clearCacheAndReload() {
 }
 
 const DEFAULT_VIEW = 'overview';
-const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports', 'training', 'running', 'recovery', 'assistant'];
-const MORE_VIEWS = ['routes', 'plans', 'reports', 'training', 'running', 'recovery', 'assistant'];
+const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes', 'plans', 'reports', 'training', 'running', 'recovery', 'assistant', 'goals'];
+const MORE_VIEWS = ['routes', 'plans', 'reports', 'training', 'running', 'recovery', 'assistant', 'goals'];
 
 /** 从 URL hash 解析当前视图，非法或空时回退到总览。 */
 function viewFromHash() {

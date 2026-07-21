@@ -12,7 +12,7 @@ function apiBase(url) {
 /** 从当前 state.data 中读取某条记录的客户端 _updated_at，用于乐观锁冲突检测。 */
 function getExpectedUpdatedAt(entity, keyValue) {
   if (!state.data || keyValue == null) return undefined;
-  const key = entity === 'plans' || entity === 'activities' || entity === 'reports' ? 'id' : entity === 'body' ? 'date' : 'slug';
+  const key = entity === 'plans' || entity === 'activities' || entity === 'reports' || entity === 'goals' ? 'id' : entity === 'body' ? 'date' : 'slug';
   const arrKey = entity === 'body' ? 'body_logs' : entity;
   const arr = state.data[arrKey];
   if (!Array.isArray(arr)) return undefined;
@@ -59,7 +59,7 @@ async function fetchDelete(apiUrl, token, entity, id) {
       const key = entity === 'body' ? 'body_logs' : entity;
       const arr = state.data[key];
       if (!Array.isArray(arr)) return;
-      const pk = entity === 'plans' || entity === 'reports' ? 'id' : entity === 'body' ? 'date' : 'slug';
+      const pk = entity === 'plans' || entity === 'reports' || entity === 'goals' ? 'id' : entity === 'body' ? 'date' : 'slug';
       state.data[key] = arr.filter((item) => String(item[pk]) !== String(id));
       renderAll();
       saveSnapshot();
@@ -452,6 +452,65 @@ async function fetchUpdateReport(apiUrl, token, id, payload) {
         state.data.reports = reports;
       }
       renderReports();
+      saveSnapshot();
+    },
+  });
+}
+
+/** 保存目标：POST /goals */
+async function fetchSaveGoal(apiUrl, token, payload) {
+  const url = `${apiBase(apiUrl)}/goals`;
+  const tempId = 'offline-goal-' + (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+  const options = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '保存目标',
+    optimistic: () => {
+      const merged = { id: tempId, ...payload.data, _raw_markdown: payload.raw_markdown };
+      const goals = state.data.goals || [];
+      goals.push(merged);
+      state.data.goals = goals.sort((a, b) => String(b.period_key).localeCompare(String(a.period_key)));
+      renderGoals();
+      saveSnapshot();
+    },
+  });
+}
+
+/** 更新目标：PUT /goals/:id */
+async function fetchUpdateGoal(apiUrl, token, id, payload) {
+  const url = `${apiBase(apiUrl)}/goals/${encodeURIComponent(id)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('goals', id);
+  const options = {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ ...payload, expected_updated_at: expectedUpdatedAt }),
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '更新目标',
+    expectedUpdatedAt,
+    optimistic: () => {
+      const goals = state.data.goals || [];
+      const idx = goals.findIndex((g) => String(g.id) === String(id));
+      if (idx >= 0) {
+        goals[idx] = { ...goals[idx], ...payload.data, _raw_markdown: payload.raw_markdown };
+        state.data.goals = goals;
+      }
+      renderGoals();
       saveSnapshot();
     },
   });
