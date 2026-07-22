@@ -149,6 +149,42 @@ function markWeeklyReportSeen() {
   }
 }
 
+/** 格式化训练目标供 AI 助手使用，返回当前周期目标的自然语言摘要 */
+function formatGoalsForAssistant(goals, activities) {
+  if (!goals || !goals.length) return null;
+
+  const now = new Date();
+  const result = [];
+
+  for (const g of goals) {
+    const progress = computeGoalProgress(g, activities);
+    const isCurrent = now >= new Date(progress.range.start + 'T00:00:00') &&
+                     now <= new Date(progress.range.end + 'T23:59:59');
+    if (!isCurrent) continue;
+
+    const label = goalTypeLabel(g.goal_type);
+    const unit = goalUnit(g.goal_type);
+    const phase = getCurrentPhase(g.period_key, g.goal_type);
+    const daysLeft = Math.max(1, Math.ceil(
+      (new Date(progress.range.end + 'T00:00:00') - now) / (1000 * 60 * 60 * 24)
+    ));
+
+    result.push({
+      goal_type: g.goal_type,
+      label: label,
+      unit: unit,
+      target: progress.target,
+      current: progress.current,
+      remaining: progress.remaining,
+      days_left: daysLeft,
+      phase: phase.label,
+      range: progress.range
+    });
+  }
+
+  return result.length ? result : null;
+}
+
 function buildAssistantContext(data, intent = 'query') {
   if (!data) return {};
 
@@ -159,6 +195,7 @@ function buildAssistantContext(data, intent = 'query') {
   const routes = data.routes || [];
   const plans = data.plans || [];
   const segments = data.segments || [];
+  const goals = data.goals || [];
 
   // 全局摘要（query / 兜底用）
   const now = new Date();
@@ -199,6 +236,9 @@ function buildAssistantContext(data, intent = 'query') {
     fatigue_status: fatigue.status || '',
   };
 
+  // 格式化当前周期目标
+  const currentGoals = formatGoalsForAssistant(goals, activities);
+
   // 按意图裁剪上下文，只传该意图需要的数据，减少 token 和 JSON 体积
   if (intent === 'body') {
     return {
@@ -216,6 +256,7 @@ function buildAssistantContext(data, intent = 'query') {
           mood: b.mood != null ? Number(b.mood) : null,
           weight_kg: b.weight_kg != null ? Number(b.weight_kg) : null,
         })),
+      current_training_goals: currentGoals,
     };
   }
 
@@ -236,6 +277,7 @@ function buildAssistantContext(data, intent = 'query') {
           avg_hr: a.avg_hr != null ? Number(a.avg_hr) : null,
           felt: a.felt || '',
         })),
+      current_training_goals: currentGoals,
     };
   }
 
@@ -252,6 +294,7 @@ function buildAssistantContext(data, intent = 'query') {
         estimated_hours: Number(r.estimated_hours) || 0,
         weather_city: r.weather_city || '',
       })),
+      current_training_goals: currentGoals,
     };
   }
 
@@ -321,6 +364,7 @@ function buildAssistantContext(data, intent = 'query') {
       distance_km: s.data?.distance_km ?? null,
       elevation_gain_m: s.data?.elevation_gain_m ?? null,
     })),
+    current_training_goals: currentGoals,
   };
 }
 
