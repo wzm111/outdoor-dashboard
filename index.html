@@ -52,8 +52,7 @@
         <button type="button" class="tab" data-view="activities">活动</button>
         <button type="button" class="tab" data-view="body">身体趋势</button>
         <button type="button" class="tab" data-view="gear">装备</button>
-        <button type="button" class="tab" data-view="routes">路线</button>
-        <button type="button" class="tab" data-view="plans">计划</button>
+        <button type="button" class="tab" data-view="routes-plans">路线计划</button>
         <button type="button" class="tab" data-view="reports">报告</button>
         <button type="button" class="tab" data-view="goals">目标</button>
         <button type="button" class="tab" data-view="training">训练负荷</button>
@@ -194,12 +193,13 @@
           </div>
         </div>
       </section>
-      <section class="view" data-view="routes" hidden>
+      <section class="view" data-view="routes-plans" hidden>
         <div class="skeleton-screen" hidden>
           <div class="skeleton-header">
             <div class="skeleton-text skeleton-header-title"></div>
             <div class="skeleton-header-actions"><div class="skeleton-btn skeleton"></div><div class="skeleton-btn skeleton"></div><div class="skeleton-btn skeleton"></div></div>
           </div>
+          <!-- 路线库区域 -->
           <div class="table-wrap">
             <table>
               <thead><tr><th>名称</th><th>地点</th><th>距离</th><th>爬升</th><th>难度</th><th>预计时长</th><th>操作</th></tr></thead>
@@ -212,14 +212,8 @@
               </tbody>
             </table>
           </div>
-        </div>
-      </section>
-      <section class="view" data-view="plans" hidden>
-        <div class="skeleton-screen" hidden>
-          <div class="skeleton-header">
-            <div class="skeleton-text skeleton-header-title"></div>
-            <div class="skeleton-header-actions"><div class="skeleton-btn skeleton"></div></div>
-          </div>
+          <!-- 计划区域 -->
+          <div class="skeleton-title"></div>
           <div class="skeleton-plan-card">
             <div class="skeleton-header"><div class="skeleton-text skeleton-header-title skeleton-w-55"></div><div class="skeleton-header-actions"><div class="skeleton-btn skeleton"></div><div class="skeleton-btn skeleton"></div></div></div>
             <div class="skeleton-badge-row"><div class="skeleton-badge skeleton"></div><div class="skeleton-badge skeleton"></div><div class="skeleton-badge skeleton"></div></div>
@@ -391,8 +385,7 @@
     </nav>
 
     <div class="bottom-more-menu" id="bottom-more-menu" hidden>
-      <button type="button" class="bottom-more-item" data-view="routes">路线</button>
-      <button type="button" class="bottom-more-item" data-view="plans">计划</button>
+      <button type="button" class="bottom-more-item" data-view="routes-plans">路线计划</button>
       <button type="button" class="bottom-more-item" data-view="reports">报告</button>
       <button type="button" class="bottom-more-item" data-view="goals">目标</button>
       <button type="button" class="bottom-more-item" data-view="training">训练负荷</button>
@@ -417,35 +410,36 @@
     <span>加载数据中…</span>
   </div>
 
-  <script src="version.js?v=1.12.0"></script>
-  <script src="utils.js?v=1.12.0"></script>
-  <script src="state.js?v=1.12.0"></script>
-  <script src="idb.js?v=1.12.0"></script>
-  <script src="api.js?v=1.12.0"></script>
-  <script src="ui-common.js?v=1.12.0"></script>
-  <script src="body-age.js?v=1.12.0"></script>
-  <script src="activity-core.js?v=1.12.0"></script>
-  <script src="activity-form.js?v=1.12.0"></script>
-  <script src="gear-utils.js?v=1.12.0"></script>
-  <script src="gpx-utils.js?v=1.12.0"></script>
-  <script src="chart-utils.js?v=1.12.0"></script>
-  <script src="training-utils.js?v=1.12.0"></script>
-  <script src="recovery-utils.js?v=1.12.0"></script>
-  <script src="body-quick-parse.js?v=1.12.0"></script>
-  <script src="assistant-utils.js?v=1.12.0"></script>
-  <script src="view-overview.js?v=1.12.0"></script>
-  <script src="view-activities.js?v=1.12.0"></script>
-  <script src="view-body.js?v=1.12.0"></script>
-  <script src="view-gear.js?v=1.12.0"></script>
-  <script src="view-routes.js?v=1.12.0"></script>
-  <script src="view-plans.js?v=1.12.0"></script>
-  <script src="view-reports.js?v=1.12.0"></script>
-  <script src="view-goals.js?v=1.12.0"></script>
-  <script src="view-training.js?v=1.12.0"></script>
-  <script src="view-running.js?v=1.12.0"></script>
-  <script src="view-recovery.js?v=1.12.0"></script>
-  <script src="view-assistant.js?v=1.12.0"></script>
-  <script src="recommend-core.js?v=1.12.0"></script>
-  <script src="app.js?v=1.12.0"></script>
+  <script src="version.js?v=v1.18.0-2026-07-22"></script>
+  <script src="utils.js?v=v1.18.0-2026-07-22"></script>
+  <script src="state.js?v=v1.18.0-2026-07-22"></script>
+  <script src="idb.js?v=v1.18.0-2026-07-22"></script>
+  <script src="api.js?v=v1.18.0-2026-07-22"></script>
+  <script src="ui-common.js?v=v1.18.0-2026-07-22"></script>
+  <script src="body-age.js?v=v1.18.0-2026-07-22"></script>
+  <script src="activity-core.js?v=v1.18.0-2026-07-22"></script>
+  <script src="activity-form.js?v=v1.18.0-2026-07-22"></script>
+  <script src="gear-utils.js?v=v1.18.0-2026-07-22"></script>
+  <script src="gpx-utils.js?v=v1.18.0-2026-07-22"></script>
+  <script src="chart-utils.js?v=v1.18.0-2026-07-22"></script>
+  <script src="training-utils.js?v=v1.18.0-2026-07-22"></script>
+  <script src="recovery-utils.js?v=v1.18.0-2026-07-22"></script>
+  <script src="body-quick-parse.js?v=v1.18.0-2026-07-22"></script>
+  <script src="assistant-utils.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-overview.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-activities.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-body.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-gear.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-routes.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-plans.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-routes-plans.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-reports.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-goals.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-training.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-running.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-recovery.js?v=v1.18.0-2026-07-22"></script>
+  <script src="view-assistant.js?v=v1.18.0-2026-07-22"></script>
+  <script src="recommend-core.js?v=v1.18.0-2026-07-22"></script>
+  <script src="app.js?v=v1.18.0-2026-07-22"></script>
 </body>
 </html>

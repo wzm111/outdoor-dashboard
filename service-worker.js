@@ -34,6 +34,7 @@ const SHELL = [
   './view-gear.js',
   './view-routes.js',
   './view-plans.js',
+  './view-routes-plans.js',
   './view-reports.js',
   './view-goals.js',
   './view-training.js',
