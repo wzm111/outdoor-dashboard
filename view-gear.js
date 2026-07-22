@@ -20,7 +20,7 @@ function gearUsageOverview(gearList) {
   }
 
   // ---- 汇总统计（基于实时计算，而非可能过时的 gear 字段）----
-  let totalKm = 0, totalUse = 0, totalHours = 0;
+  let totalKm = 0, totalUse = 0, totalHours = 0, totalVolume = 0;
   let mostUsed = null;
   const wearMap = new Map(); // slug -> status
   let attentionCount = 0;
@@ -331,7 +331,7 @@ function openAddGear() {
 function renderGear() {
   const allGear = state.data.gear;
   const view = viewEl('gear');
-  clearViewKeepSkeleton(view);
+  view.innerHTML = '';
 
   // 顶部标题 + 添加按钮
   const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
@@ -633,25 +633,23 @@ function openGearDetail(g) {
 
   // 装备 → 活动：反查这件装备上过哪些活动，形成双向导航闭环
   const used = activitiesUsingGear(g.slug);
-  const gearMap = new Map((state.data.gear || []).map((x) => [x.slug, x]));
   wrap.appendChild(el('div', { class: 'section-title rel-heading' }, `用过的活动（${used.length}）`));
   if (!used.length) {
     wrap.appendChild(el('div', { class: 'empty' }, '暂无关联活动记录'));
   } else {
-    const list = el('div', { class: 'rel-list gear-detail-activity-list' });
+    const list = el('div', { class: 'rel-list' });
     for (const a of used) {
       const item = el('div', { class: 'rel-item' });
-      item.style.cursor = 'pointer';
-      item.title = '点击打开活动详情';
       const info = el('div', { class: 'rel-info' });
       info.appendChild(el('div', { class: 'rel-name' }, `${fmtDate(a.date)} · ${a.route || '活动'}`));
       info.appendChild(el('div', { class: 'rel-brief' },
         [a.type, a.distance_km != null ? num(a.distance_km) + ' km' : null,
-         a.elevation_gain_m != null ? num(a.elevation_gain_m, 0) + ' m' : null,
-         a.duration_hours != null ? fmtDuration(a.duration_hours) : null]
+         a.elevation_gain_m != null ? num(a.elevation_gain_m, 0) + ' m' : null]
           .filter(Boolean).join(' · ') || '—'));
       item.appendChild(info);
-      item.addEventListener('click', () => openActivityDetail(a, gearMap));
+      const btn = el('button', { class: 'btn-sm' }, '查看');
+      btn.addEventListener('click', () => openActivityGear(a));
+      item.appendChild(btn);
       list.appendChild(item);
     }
     wrap.appendChild(list);
