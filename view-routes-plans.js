@@ -1,0 +1,913 @@
+/* 路线 + 计划合并视图渲染 */
+'use strict';
+
+// 复用 view-routes.js 和 view-plans.js 的已有函数，只需要在这里定义 renderRoutesPlans
+// 同时保留所有原有函数供弹窗使用
+
+// ---------- 从 view-routes.js 复制所有函数（因为需要它们弹窗）----------
+
+/* 路线库所有函数 */
+
+function buildRouteMarkdown(data) {
+  const lines = ['---'];
+  lines.push(`name: "${data.name}"`);
+  if (data.location) lines.push(`location: "${data.location}"`);
+  if (data.weather_city) lines.push(`weather_city: "${data.weather_city}"`);
+  if (data.distance_km != null) lines.push(`distance_km: ${data.distance_km}`);
+  if (data.elevation_gain_m != null) lines.push(`elevation_gain_m: ${data.elevation_gain_m}`);
+  if (data.elevation_loss_m != null) lines.push(`elevation_loss_m: ${data.elevation_loss_m}`);
+  if (data.max_altitude_m != null) lines.push(`max_altitude_m: ${data.max_altitude_m}`);
+  if (data.difficulty) lines.push(`difficulty: ${data.difficulty}`);
+  if (data.estimated_hours != null) lines.push(`estimated_hours: ${data.estimated_hours}`);
+  if (Array.isArray(data.terrain) && data.terrain.length) { lines.push('terrain:'); for (const s of data.terrain) lines.push(`  - ${s}`); }
+  if (Array.isArray(data.best_seasons) && data.best_seasons.length) { lines.push('best_seasons:'); for (const s of data.best_seasons) lines.push(`  - ${s}`); }
+  if (Array.isArray(data.water_sources) && data.water_sources.length) { lines.push('water_sources:'); for (const s of data.water_sources) lines.push(`  - ${s}`); }
+  if (data.gpx_file) lines.push(`gpx_file: "${data.gpx_file}"`);
+  if (data.source_url) lines.push(`source_url: "${data.source_url}"`);
+  if (data.notes) lines.push(`notes: "${data.notes}"`);
+  lines.push('---');
+  return lines.join('\n');
+}
+
+function parseCommaList(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.filter(Boolean);
+  return String(v).split(/[,，/、]/).map((s) => s.trim()).filter(Boolean);
+}
+
+function translateList(arr, map) {
+  if (!arr) return '';
+  const list = Array.isArray(arr) ? arr : String(arr).split(/[,，/、]/);
+  return list
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .map((s) => map[s] || s)
+    .join('、');
+}
+
+const TERRAIN_MAP = {
+  trail: '土路/步道',
+  road: '公路',
+  rock: '岩石',
+  grass: '草地',
+  ridge: '山脊',
+  scree: '碎石坡',
+  snow: '雪地',
+  mud: '泥地',
+  forest: '森林',
+  desert: '沙漠',
+  wetland: '湿地',
+  paved: '铺装路面',
+  steps: '台阶',
+  river: '涉水',
+  offtrail: '无路野径',
+};
+
+const SEASON_MAP = {
+  spring: '春季',
+  summer: '夏季',
+  autumn: '秋季',
+  winter: '冬季',
+};
+
+const WATER_SOURCE_MAP = {
+  start: '起点',
+  finish: '终点',
+  summit: '山顶',
+  stream: '溪流',
+  river: '河流',
+  lake: '湖泊',
+  hut: '小屋/补给点',
+  summit_huts: '山顶小屋',
+  campsite: '营地',
+  none: '无水源',
+};
+
+function openAddRoute(route = null) {
+  if (!state.token) { toast('请先连接后再添加路线', 'warn'); return; }
+
+  const nameInput = el('input', { type: 'text', class: 'gear-select', value: route ? route.name || '' : '', placeholder: '路线名称', style: 'width:100%;' });
+  const slugInput = el('input', { type: 'text', class: 'gear-select', value: route ? route.slug : slugifyRoute(nameInput.value), placeholder: '路线 ID（slug）', style: 'width:100%;' });
+  if (route) slugInput.disabled = true;
+  const locationInput = el('input', { type: 'text', class: 'gear-select', value: route ? route.location || '' : '', placeholder: '省市 / 山区', style: 'width:100%;' });
+  const weatherCityInput = el('input', { type: 'text', class: 'gear-select', value: route ? route.weather_city || '' : '', placeholder: '最近城市，用于查天气', style: 'width:100%;' });
+  const distInput = el('input', { type: 'number', class: 'gear-select', value: route ? route.distance_km != null ? route.distance_km : '' : '', step: '0.1', placeholder: '公里', style: 'width:100%;' });
+  const gainInput = el('input', { type: 'number', class: 'gear-select', value: route ? route.elevation_gain_m != null ? route.elevation_gain_m : '' : '', placeholder: '米', style: 'width:100%;' });
+  const lossInput = el('input', { type: 'number', class: 'gear-select', value: route ? route.elevation_loss_m != null ? route.elevation_loss_m : '' : '', placeholder: '米', style: 'width:100%;' });
+  const maxAltInput = el('input', { type: 'number', class: 'gear-select', value: route ? route.max_altitude_m != null ? route.max_altitude_m : '' : '', placeholder: '米', style: 'width:100%;' });
+  const diffSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: '' }, '（未选择）'),
+    el('option', { value: 'easy' }, '简单 easy'),
+    el('option', { value: 'moderate' }, '适中 moderate'),
+    el('option', { value: 'hard' }, '困难 hard'),
+    el('option', { value: 'extreme' }, '极难 extreme')
+  );
+  if (route && route.difficulty) diffSel.value = route.difficulty;
+  const hoursInput = el('input', { type: 'number', class: 'gear-select', value: route ? route.estimated_hours != null ? route.estimated_hours : '' : '', step: '0.1', placeholder: '小时', style: 'width:100%;' });
+  const terrainInput = el('input', { type: 'text', class: 'gear-select', value: route ? Array.isArray(route.terrain) ? route.terrain.join('、') : route.terrain || '' : '', placeholder: 'rock, grass, ridge（用逗号分隔）', style: 'width:100%;' });
+  const seasonsInput = el('input', { type: 'text', class: 'gear-select', value: route ? Array.isArray(route.best_seasons) ? route.best_seasons.join('、') : route.best_seasons || '' : '', placeholder: 'spring, autumn（用逗号分隔）', style: 'width:100%;' });
+  const waterInput = el('input', { type: 'text', class: 'gear-select', value: route ? Array.isArray(route.water_sources) ? route.water_sources.join('、') : route.water_sources || '' : '', placeholder: '起点, 山顶补给站（用逗号分隔）', style: 'width:100%;' });
+  const sourceInput = el('input', { type: 'url', class: 'gear-select', value: route ? route.source_url || '' : '', placeholder: 'https://...', style: 'width:100%;' });
+  const notesInput = el('textarea', { class: 'gear-select', rows: 3, placeholder: '路线备注', style: 'width:100%;' }, route ? route.notes || '' : '');
+
+  if (!route) {
+    nameInput.addEventListener('input', () => { slugInput.value = slugifyRoute(nameInput.value); });
+  }
+
+  const form = el('div', { class: 'recommend-form' },
+    el('div', { class: 'form-row' }, el('label', {}, '名称 *'), nameInput),
+    route ? el('div', { class: 'form-row' }, el('label', {}, '路线 ID'), slugInput) : el('div', { class: 'form-row' }, el('label', {}, '路线 ID *'), slugInput),
+    el('div', { class: 'form-row' }, el('label', {}, '地点'), locationInput),
+    el('div', { class: 'form-row' }, el('label', {}, '天气城市'), weatherCityInput),
+    el('div', { class: 'form-row' }, el('label', {}, '距离 (km)'), distInput),
+    el('div', { class: 'form-row' }, el('label', {}, '爬升 (m)'), gainInput),
+    el('div', { class: 'form-row' }, el('label', {}, '下降 (m)'), lossInput),
+    el('div', { class: 'form-row' }, el('label', {}, '最高海拔 (m)'), maxAltInput),
+    el('div', { class: 'form-row' }, el('label', {}, '难度'), diffSel),
+    el('div', { class: 'form-row' }, el('label', {}, '预计时长 (h)'), hoursInput),
+    el('div', { class: 'form-row' }, el('label', {}, '地形'), terrainInput),
+    el('div', { class: 'form-row' }, el('label', {}, '最佳季节'), seasonsInput),
+    el('div', { class: 'form-row' }, el('label', {}, '水源'), waterInput),
+    el('div', { class: 'form-row' }, el('label', {}, '来源链接'), sourceInput),
+    el('div', { class: 'form-row' }, el('label', {}, '备注'), notesInput)
+  );
+
+  const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, route ? '保存修改' : '添加路线');
+  const originalSlug = route ? route.slug : null;
+
+  saveBtn.addEventListener('click', async () => {
+    const name = nameInput.value.trim();
+    const slug = slugInput.value.trim();
+    if (!name || !slug) { toast('请填写名称和路线 ID', 'warn'); return; }
+    const data = { name };
+    const loc = locationInput.value.trim(); if (loc) data.location = loc;
+    const wc = weatherCityInput.value.trim(); if (wc) data.weather_city = wc;
+    const d = Number(distInput.value); if (!isNaN(d) && d >= 0) data.distance_km = d;
+    const g = Number(gainInput.value); if (!isNaN(g)) data.elevation_gain_m = g;
+    const l = Number(lossInput.value); if (!isNaN(l)) data.elevation_loss_m = l;
+    const m = Number(maxAltInput.value); if (!isNaN(m)) data.max_altitude_m = m;
+    if (diffSel.value) data.difficulty = diffSel.value;
+    const h = Number(hoursInput.value); if (!isNaN(h) && h >= 0) data.estimated_hours = h;
+    const terrain = parseCommaList(terrainInput.value); if (terrain.length) data.terrain = terrain;
+    const seasons = parseCommaList(seasonsInput.value); if (seasons.length) data.best_seasons = seasons;
+    const water = parseCommaList(waterInput.value); if (water.length) data.water_sources = water;
+    const src = sourceInput.value.trim(); if (src) data.source_url = src;
+    const notes = notesInput.value.trim(); if (notes) data.notes = notes;
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      if (originalSlug && originalSlug !== slug) {
+        await fetchDelete(state.apiUrl, state.token, 'routes', originalSlug);
+      }
+      await fetchSaveRoute(state.apiUrl, state.token, slug, { data, raw_markdown: buildRouteMarkdown(data) });
+      toast('路线已保存', 'success');
+      close();
+      await loadAndRender(true);
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = route ? '保存修改' : '添加路线';
+    }
+  });
+
+  const close = showModal(route ? '编辑路线' : '添加路线', form, [saveBtn, el('button', { class: 'btn' }, '关闭')]);
+}
+
+function renderRoutesOnly(container) {
+  const routes = [...state.data.routes].sort((a, b) =>
+    (Number(b.distance_km) || 0) - (Number(a.distance_km) || 0));
+  // 顶部标题 + AI 添加 + 推荐装备按钮（空列表时按钮也保留）
+  const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+    el('span', {}, `路线库（${routes.length}）`),
+    el('div', { style: 'display:flex;gap:8px;' },
+      el('button', { class: 'btn-sm btn-primary', 'data-action': 'recommend-gear' }, '推荐装备'),
+      el('button', { class: 'btn-sm', 'data-action': 'add-route' }, '添加路线'),
+      el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-route-ai' }, 'AI 添加')
+    )
+  );
+  container.appendChild(headerRow);
+  $('.btn-sm[data-action="add-route"]', headerRow).addEventListener('click', () => openAddRoute());
+  $('.btn-sm[data-action="add-route-ai"]', headerRow).addEventListener('click', () => openAddRouteByAi());
+  $('.btn-sm[data-action="recommend-gear"]', headerRow).addEventListener('click', () => openRecommendGear());
+
+  if (!routes.length) {
+    container.appendChild(el('div', { class: 'empty' }, '暂无路线'));
+    return;
+  }
+
+  const wrap = el('div', { class: 'table-wrap' });
+  const table = el('table');
+  table.appendChild(el('thead', {}, el('tr', {},
+    el('th', {}, '名称'), el('th', {}, '地点'), el('th', {}, '距离'),
+    el('th', {}, '爬升'), el('th', {}, '难度'), el('th', {}, '预计时长'),
+    el('th', {}, '操作'),
+  )));
+  const tbody = el('tbody');
+  for (const r of routes) {
+    const diff = r.difficulty;
+    const cls = diff === 'hard' || diff === 'extreme' ? 'hard'
+      : diff === 'moderate' ? 'moderate' : 'easy';
+    const tr = el('tr', { class: 'route-row' },
+      el('td', {}, r.name || r.slug || '—'),
+      el('td', {}, r.location || '—'),
+      el('td', { class: 'num' }, num(r.distance_km) + ' km'),
+      el('td', { class: 'num' }, num(r.elevation_gain_m, 0) + ' m'),
+      el('td', {}, diff ? el('span', { class: 'badge ' + cls }, diff) : '—'),
+      el('td', { class: 'num' }, r.estimated_hours != null ? num(r.estimated_hours) + ' h' : '—'),
+      el('td', { class: 'actions' },
+        el('button', { class: 'btn-sm', 'data-action': 'detail', style: 'margin-right:6px;' }, '详情'),
+        el('button', { class: 'btn-sm', 'data-action': 'edit', style: 'margin-right:6px;' }, '编辑'),
+        el('button', { class: 'btn-sm btn-primary', 'data-action': 'recommend', style: 'margin-right:6px;' }, '推荐'),
+        el('button', { class: 'btn-sm btn-danger', 'data-action': 'delete' }, '删除')
+      )
+    );
+    $('.btn-sm[data-action="detail"]', tr).addEventListener('click', () => openRouteDetail(r));
+    $('.btn-sm[data-action="edit"]', tr).addEventListener('click', () => openAddRoute(r));
+    $('.btn-sm[data-action="recommend"]', tr).addEventListener('click', () => openRecommendGear(r));
+    $('.btn-sm[data-action="delete"]', tr).addEventListener('click', async () => {
+      const used = state.data.activities.filter((a) => a.route === r.name || a.route === r.slug).length;
+      const msg = used
+        ? `路线「${r.name || r.slug}」已被 ${used} 条活动记录引用。删除路线不会影响已有活动，但活动详情中的路线名会保留。确认删除？`
+        : `确认删除路线「${r.name || r.slug}」？`;
+      if (!confirm(msg)) return;
+      try {
+        await fetchDelete(state.apiUrl, state.token, 'routes', r.slug);
+        toast('路线已删除', 'success');
+        await loadAndRender(true);
+      } catch (err) {
+        toast(err.message || '删除失败', 'error');
+      }
+    });
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  labelTableCells(table, ['名称', '地点', '距离', '爬升', '难度', '预计时长', '操作']);
+  wrap.appendChild(table);
+  container.appendChild(wrap);
+}
+
+function openRouteDetail(r) {
+  const wrap = el('div', { class: 'route-detail-modal-body' });
+
+  wrap.appendChild(routeDetailStats(r));
+
+  const meta = routeDetailMetadata(r);
+  if (meta) wrap.appendChild(meta);
+
+  const extended = routeDetailExtended(r);
+  if (extended) wrap.appendChild(extended);
+
+  const gpxSection = el('div', { class: 'route-detail-section' });
+  gpxSection.appendChild(el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+    el('span', {}, 'GPX 海拔剖面'),
+    state.token ? el('label', { class: 'btn-sm', style: 'cursor:pointer;margin:0;', for: `route-gpx-upload-${r.slug}` }, '📎 上传/替换 GPX') : ''
+  ));
+  const gpxPanel = el('div', { class: 'route-detail-gpx-panel' },
+    el('div', { class: 'skeleton skeleton-route-chart' }));
+  gpxSection.appendChild(gpxPanel);
+  wrap.appendChild(gpxSection);
+  routeDetailGpxPanel(r, gpxPanel);
+
+  if (state.token) {
+    const fileInput = el('input', {
+      type: 'file',
+      id: `route-gpx-upload-${r.slug}`,
+      accept: '.gpx,application/gpx+xml',
+      style: 'display:none;',
+    });
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) handleRouteGpxUpload(r, file);
+    });
+    wrap.appendChild(fileInput);
+  }
+
+  const acts = routeRelatedActivities(r);
+  wrap.appendChild(routeDetailActivities(r, acts));
+
+  showModal(r.name || r.slug || '路线详情', wrap,
+    [el('button', { class: 'btn' }, '关闭')], null, 'modal-wide');
+}
+
+function routeDetailStats(r) {
+  const grid = el('div', { class: 'stat-grid route-detail-stats' });
+  const st = (label, value, unit) =>
+    el('div', { class: 'stat-card' },
+      el('div', { class: 'label' }, label),
+      el('div', { class: 'value' }, value,
+        unit ? el('span', { class: 'unit' }, unit) : ''));
+  grid.appendChild(st('距离', num(r.distance_km), 'km'));
+  grid.appendChild(st('爬升', num(r.elevation_gain_m, 0), 'm'));
+  grid.appendChild(st('下降', num(r.elevation_loss_m, 0), 'm'));
+  grid.appendChild(st('最高海拔', num(r.max_altitude_m, 0), 'm'));
+  grid.appendChild(st('预计时长', num(r.estimated_hours), 'h'));
+  const diffMap = { easy: '简单', moderate: '适中', hard: '困难', extreme: '极难' };
+  const diffText = diffMap[r.difficulty] || r.difficulty;
+  grid.appendChild(st('难度', diffText || '—'));
+  return grid;
+}
+
+function routeDetailMetadata(r) {
+  const items = [];
+  if (r.location) items.push(['地点', r.location]);
+  if (r.weather_city) items.push(['天气城市', r.weather_city]);
+  const terrain = translateList(r.terrain, TERRAIN_MAP);
+  if (terrain) items.push(['地形', terrain]);
+  const seasons = translateList(r.best_seasons, SEASON_MAP);
+  if (seasons) items.push(['最佳季节', seasons]);
+  const water = translateList(r.water_sources, WATER_SOURCE_MAP);
+  if (water) items.push(['水源', water]);
+  if (r.source_url) {
+    items.push(['来源', el('a', { href: r.source_url, target: '_blank', rel: 'noopener' }, r.source_url)]);
+  }
+  if (r.notes) items.push(['备注', r.notes]);
+  if (!items.length) return null;
+
+  const section = el('div', { class: 'route-detail-section' });
+  section.appendChild(el('div', { class: 'section-title' }, '基本信息'));
+  const grid = el('div', { class: 'route-meta-grid' });
+  for (const [k, v] of items) {
+    grid.appendChild(el('div', { class: 'route-meta-label' }, k));
+    grid.appendChild(el('div', { class: 'route-meta-value' }, v));
+  }
+  section.appendChild(grid);
+  return section;
+}
+
+function routeDetailExtended(r) {
+  const blocks = [];
+  if (r.suggested_days) {
+    blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '建议天数'),
+      el('div', {}, String(r.suggested_days) + ' 天')));
+  }
+  if (Array.isArray(r.suitable_for) && r.suitable_for.length) {
+    const text = r.suitable_for
+      .map((x) => (typeof x === 'string' ? x : (x && (x.label || x.value || x.name)) || ''))
+      .filter(Boolean)
+      .join('、');
+    if (text) blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '适合人群'),
+      el('div', {}, text)));
+  }
+  if (Array.isArray(r.not_suitable_for) && r.not_suitable_for.length) {
+    const text = r.not_suitable_for
+      .map((x) => (typeof x === 'string' ? x : (x && (x.label || x.value || x.name)) || ''))
+      .filter(Boolean)
+      .join('、');
+    if (text) blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '不适合人群'),
+      el('div', {}, text)));
+  }
+  if (r.trail_condition) {
+    blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '路况'),
+      el('div', {}, r.trail_condition)));
+  }
+  if (r.season_notes) {
+    blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '季节说明'),
+      el('div', {}, r.season_notes)));
+  }
+  if (Array.isArray(r.day_by_day) && r.day_by_day.length) {
+    const list = el('div', { class: 'route-day-list' });
+    for (const day of r.day_by_day) {
+      const title = day.title || (day.day ? `第 ${day.day} 天` : null) || `第 ${day.day_index || '?'} 天`;
+      const desc = [
+        day.distance_km != null ? num(day.distance_km) + ' km' : null,
+        day.elevation_gain_m != null ? num(day.elevation_gain_m, 0) + ' m' : null,
+        day.description,
+      ].filter(Boolean).join(' · ');
+      list.appendChild(el('div', { class: 'route-day-card' },
+        el('div', { class: 'route-day-title' }, title),
+        desc ? el('div', { class: 'route-day-desc' }, desc) : ''));
+    }
+    blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '分段行程'),
+      list));
+  }
+  if (Array.isArray(r.bailout_points) && r.bailout_points.length) {
+    const list = el('div', { class: 'route-bailout-list' });
+    for (const bp of r.bailout_points) {
+      const loc = typeof bp === 'string' ? bp : (bp.location || bp.name || '');
+      const desc = typeof bp === 'string' ? '' : (bp.description || '');
+      list.appendChild(el('div', { class: 'route-bailout-item' },
+        el('div', { class: 'route-bailout-loc' }, '🚨 ' + loc),
+        desc ? el('div', { class: 'route-bailout-desc' }, desc) : ''));
+    }
+    blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '下撤点'),
+      list));
+  }
+  if (Array.isArray(r.accommodation) && r.accommodation.length) {
+    const list = el('div', { class: 'route-accom-list' });
+    for (const acc of r.accommodation) {
+      const loc = typeof acc === 'string' ? acc : (acc.location || acc.name || '');
+      const type = typeof acc === 'string' ? '' : (acc.type || '');
+      const note = typeof acc === 'string' ? '' : (acc.note || '');
+      list.appendChild(el('div', { class: 'route-accom-item' },
+        el('div', {}, (type ? type + ' · ' : '') + loc),
+        note ? el('div', { class: 'route-accom-note' }, note) : ''));
+    }
+    blocks.push(el('div', { class: 'route-extended-block' },
+      el('div', { class: 'route-extended-title' }, '住宿/营地'),
+      list));
+  }
+  if (!blocks.length) return null;
+
+  const section = el('div', { class: 'route-detail-section' });
+  section.appendChild(el('div', { class: 'section-title' }, '路线详情'));
+  for (const b of blocks) section.appendChild(b);
+  return section;
+}
+
+function routeRelatedActivities(r) {
+  const name = String(r.name || '').trim();
+  const slug = String(r.slug || '').trim();
+  return (state.data.activities || [])
+    .filter((a) => {
+      const ar = String(a.route || '').trim();
+      return ar && (ar === name || ar === slug);
+    })
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+function routeActivityStats(acts) {
+  if (!acts.length) return null;
+  const times = acts.map((a) => Number(a.duration_hours)).filter((v) => !isNaN(v) && v > 0);
+  const dists = acts.map((a) => Number(a.distance_km)).filter((v) => !isNaN(v) && v > 0);
+  return {
+    count: acts.length,
+    bestTime: times.length ? Math.min(...times) : null,
+    avgTime: times.length ? times.reduce((s, v) => s + v, 0) / times.length : null,
+    avgDistance: dists.length ? dists.reduce((s, v) => s + v, 0) / dists.length : null,
+  };
+}
+
+function routeDetailActivities(r, acts) {
+  const section = el('div', { class: 'route-detail-section' });
+  const stats = routeActivityStats(acts);
+  section.appendChild(el('div', { class: 'section-title' }, `历史活动（${acts.length}）`));
+  if (!acts.length) {
+    section.appendChild(el('div', { class: 'empty' }, '暂无关联活动记录'));
+    return section;
+  }
+
+  if (stats) {
+    const statRow = el('div', { class: 'elevation-stat-row' });
+    const stat = (label, value, unit) =>
+      el('div', { class: 'elevation-stat' },
+        el('div', { class: 'elevation-stat-value' }, value,
+          unit ? el('span', { class: 'elevation-stat-unit' }, unit) : ''),
+        el('div', { class: 'elevation-stat-label' }, label));
+    statRow.appendChild(stat('次数', num(stats.count, 0)));
+    statRow.appendChild(stat('平均距离', stats.avgDistance != null ? num(stats.avgDistance, 1) : '—', 'km'));
+    statRow.appendChild(stat('平均时长', stats.avgTime != null ? num(stats.avgTime, 1) : '—', 'h'));
+    statRow.appendChild(stat('最快用时', stats.bestTime != null ? fmtDuration(stats.bestTime) : '—'));
+    section.appendChild(statRow);
+  }
+
+  const gearMap = new Map((state.data.gear || []).map((g) => [g.slug, g]));
+  const list = el('div', { class: 'rel-list route-detail-activity-list' });
+  for (const a of acts) {
+    list.appendChild(routeActivityRow(a, stats && stats.bestTime, gearMap));
+  }
+  section.appendChild(list);
+  return section;
+}
+
+function routeActivityRow(a, bestDuration, gearMap) {
+  const isBest = bestDuration != null && Number(a.duration_hours) === bestDuration;
+  const item = el('div', { class: 'rel-item' + (isBest ? ' route-activity-best' : '') });
+  item.style.cursor = 'pointer';
+  item.title = '点击打开活动详情';
+  const info = el('div', { class: 'rel-info' });
+  info.appendChild(el('div', { class: 'rel-name' }, `${fmtDate(a.date)} · ${a.route || '活动'}`));
+  const parts = [
+    a.type,
+    a.distance_km != null ? num(a.distance_km) + ' km' : null,
+    a.elevation_gain_m != null ? num(a.elevation_gain_m, 0) + ' m' : null,
+    a.duration_hours != null ? fmtDuration(a.duration_hours) : null,
+    a.avg_pace || paceMinPerKm(a.distance_km, a.duration_hours),
+    a.felt ? `感受:${a.felt}` : null,
+  ].filter(Boolean);
+  info.appendChild(el('div', { class: 'rel-brief' }, parts.join(' · ') || '—'));
+  item.appendChild(info);
+  if (isBest) {
+    item.appendChild(el('span', { class: 'badge easy' }, '最快'));
+  }
+  item.addEventListener('click', () => openActivityDetail(a, gearMap));
+  return item;
+}
+
+async function routeDetailGpxPanel(r, container) {
+  container.innerHTML = '';
+  const url = r.gpx_file ? String(r.gpx_file).trim() : '';
+  if (!url || !url.startsWith('http')) {
+    container.appendChild(el('div', { class: 'empty' }, '未配置可在线访问的 GPX 轨迹'));
+    return;
+  }
+
+  container.appendChild(el('div', { class: 'skeleton skeleton-route-chart' }));
+  try {
+    const res = await fetchGpxWithCache(url);
+    if (!res.ok) {
+      container.innerHTML = '';
+      container.appendChild(el('div', { class: 'empty' }, `无法加载 GPX：${res.error || '未知错误'}`));
+      return;
+    }
+    const points = parseGpxXml(res.text);
+    if (!points.length) {
+      container.innerHTML = '';
+      container.appendChild(el('div', { class: 'empty' }, 'GPX 中未找到轨迹点'));
+      return;
+    }
+    const simple = simplifyGpxPoints(points, 800);
+    const stats = computeGpxStats(points);
+    container.innerHTML = '';
+    container.appendChild(elevationProfileCard('海拔剖面', simple, { stats, height: 220 }));
+  } catch (err) {
+    container.innerHTML = '';
+    container.appendChild(el('div', { class: 'empty' }, `GPX 解析失败：${err.message || '未知错误'}`));
+  }
+}
+
+async function handleRouteGpxUpload(route, file) {
+  if (!state.token) { toast('请先连接后再上传 GPX', 'warn'); return; }
+  const text = await file.text();
+  let points;
+  try {
+    points = parseGpxXml(text);
+  } catch (err) {
+    toast(`GPX 解析失败：${err.message || '未知错误'}`, 'error');
+    return;
+  }
+  if (!points.length) {
+    toast('GPX 文件中未找到轨迹点', 'warn');
+    return;
+  }
+  const stats = computeGpxStats(points);
+
+  const doSave = confirm(
+    `解析成功：${points.length} 个轨迹点，距离 ${num(stats.distanceKm, 1)} km，爬升 ${stats.gainM} m。\n\n` +
+    `是否同时把路线统计更新为 GPX 计算值？\n（距离/爬升/下降/最高海拔会被覆盖）\n\n` +
+    `点击「确定」更新统计并保存 GPX；点击「取消」只保存 GPX 不覆盖统计。`
+  );
+
+  const updated = { ...route };
+  if (doSave) {
+    updated.distance_km = Number(stats.distanceKm.toFixed(1));
+    updated.elevation_gain_m = stats.gainM;
+    updated.elevation_loss_m = stats.lossM;
+    updated.max_altitude_m = stats.maxEleM;
+  }
+  const base64 = btoa(unescape(encodeURIComponent(text)));
+  const dataUrl = `data:application/gpx+xml;base64,${base64}`;
+  if (dataUrl.length > 1024 * 1024) {
+    toast('GPX 文件过大（>1MB），建议先上传到外部图床/网盘再粘贴 URL', 'warn');
+    return;
+  }
+  updated.gpx_file = dataUrl;
+
+  const slug = route.slug || route.name;
+  try {
+    await fetchSaveRoute(state.apiUrl, state.token, slug, {
+      data: packRoutePayload(updated).data,
+      raw_markdown: buildRouteMarkdown(updated),
+    });
+    toast('GPX 已保存到路线', 'success');
+    await loadAndRender(true);
+    const refreshed = state.data.routes.find((r) => (r.slug || r.name) === slug);
+    if (refreshed) openRouteDetail(refreshed);
+  } catch (err) {
+    toast(err.message || '保存 GPX 失败', 'error');
+  }
+}
+
+function slugifyRoute(name) {
+  const raw = String(name || '').trim().toLowerCase();
+  const slug = raw
+    .replace(/[^a-z0-9一-龥]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
+  return slug || 'route-' + Date.now();
+}
+
+function packRoutePayload(data) {
+  const copy = { ...data };
+  delete copy.slug;
+  delete copy._raw_markdown;
+  delete copy._updated_at;
+  delete copy._path;
+  return { data: copy };
+}
+
+function routeFactList(r) {
+  const facts = [
+    ['名称', r.name],
+    ['地点', r.location],
+    ['天气城市', r.weather_city],
+    ['距离', r.distance_km != null ? num(r.distance_km) + ' km' : null],
+    ['爬升', r.elevation_gain_m != null ? num(r.elevation_gain_m, 0) + ' m' : null],
+    ['下降', r.elevation_loss_m != null ? num(r.elevation_loss_m, 0) + ' m' : null],
+    ['最高海拔', r.max_altitude_m != null ? num(r.max_altitude_m, 0) + ' m' : null],
+    ['难度', r.difficulty],
+    ['预计时长', r.estimated_hours != null ? num(r.estimated_hours) + ' h' : null],
+    ['地形', Array.isArray(r.terrain) ? r.terrain.join('、') : r.terrain],
+    ['最佳季节', fmtStringList(r.best_seasons)],
+    ['水源', fmtStringList(r.water_sources)],
+    ['备注', r.notes],
+  ].filter(([, v]) => v != null && v !== '');
+  const list = el('ul', { class: 'detail-list' });
+  for (const [k, v] of facts) {
+    list.appendChild(el('li', {}, el('strong', {}, k + '：'), document.createTextNode(String(v))));
+  }
+  return list;
+}
+
+function renderRouteAiResult(container, parsed, provider) {
+  container.innerHTML = '';
+  if (!parsed || !parsed.name) {
+    container.appendChild(el('div', { class: 'empty' }, '没有识别到路线名称，请补充更完整的描述（至少给出路线名）。'));
+    return;
+  }
+  const titleText = provider ? `AI 识别结果（${provider === 'moonshot' ? 'Kimi' : 'DeepSeek'}）` : '识别结果';
+  container.appendChild(el('div', { class: 'section-title' }, `${titleText}（确认后保存）`));
+  container.appendChild(routeFactList(parsed));
+
+  const existing = new Set((state.data.routes || []).map((r) => r.slug));
+  const defSlug = slugifyRoute(parsed.name);
+  const slugInput = el('input', { type: 'text', class: 'gear-select', value: defSlug, style: 'width:100%;' });
+  const slugRow = el('div', { class: 'form-row' },
+    el('label', {}, '路线 ID（slug，可修改；与已有路线相同则覆盖更新）'), slugInput);
+  container.appendChild(slugRow);
+
+  const dupHint = el('div', { class: 'wear-badge warn', style: 'display:none;margin:6px 0;' }, '');
+  container.appendChild(dupHint);
+  const refreshDup = () => {
+    if (existing.has(slugInput.value.trim())) {
+      dupHint.style.display = ''; dupHint.textContent = '已存在同 ID 路线，保存将覆盖它';
+    } else { dupHint.style.display = 'none'; }
+  };
+  slugInput.addEventListener('input', refreshDup);
+  refreshDup();
+
+  const saveBtn = el('button', { class: 'btn btn-primary' }, '保存路线');
+  saveBtn.addEventListener('click', async () => {
+    const slug = slugInput.value.trim();
+    if (!slug) { toast('请填写路线 ID', 'warn'); return; }
+    if (!state.token) { toast('未连接，无法保存', 'error'); return; }
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      await fetchSaveRoute(state.apiUrl, state.token, slug, packRoutePayload(parsed));
+      toast('保存成功，正在刷新…', 'success');
+      await loadAndRender(true);
+      $$('.modal-overlay').forEach((m) => m.remove());
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存路线';
+    }
+  });
+  container.appendChild(saveBtn);
+}
+
+function openAddRouteByAi() {
+  if (!state.token) { toast('请先连接后再添加路线', 'warn'); return; }
+  const content = el('div', {});
+  const resultArea = el('div', { class: 'scrape-result' });
+  const label = el('label', {}, '用一句话描述路线，AI 会识别名称、距离、爬升、难度等字段');
+  const textarea = el('textarea', { id: 'add-route-ai', rows: 5, placeholder: '例如：武功山反穿，江西萍乡，24km 爬升1800m，山脊草甸地形，预计10小时' });
+  const actions = el('div', { class: 'gear-card-actions' });
+  const aiBtn = el('button', { class: 'btn btn-primary' }, 'AI 识别并生成');
+  actions.appendChild(aiBtn);
+
+  async function run() {
+    const text = textarea.value.trim();
+    if (!text) { toast('请先输入路线描述', 'warn'); return; }
+    aiBtn.disabled = true;
+    aiBtn.textContent = '识别中…';
+    resultArea.innerHTML = '';
+    try {
+      const res = await fetchAiRoute(state.apiUrl, state.token, text);
+      if (!res.ok || !res.data) {
+        throw new Error(res.error || 'AI 未返回有效字段');
+      }
+      renderRouteAiResult(resultArea, res.data, res.provider);
+    } catch (err) {
+      resultArea.appendChild(el('div', { class: 'error-text' }, err.message || 'AI 识别失败'));
+    } finally {
+      aiBtn.disabled = false;
+      aiBtn.textContent = 'AI 识别并生成';
+    }
+  }
+
+  aiBtn.addEventListener('click', run);
+  content.appendChild(el('div', { class: 'form-row' }, label, textarea));
+  content.appendChild(actions);
+  content.appendChild(resultArea);
+  showModal('AI 添加路线', content, []);
+}
+
+// ---------- 从 view-plans.js 复制所有函数 ----------
+
+/* 计划所有函数 */
+
+async function fetchUpdatePlan(apiUrl, token, id, payload) {
+  const url = `${apiBase(apiUrl)}/plans/${encodeURIComponent(id)}`;
+  const expectedUpdatedAt = getExpectedUpdatedAt('plans', id);
+  const options = {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ ...payload, expected_updated_at: expectedUpdatedAt }),
+  };
+  return mutateRequest({
+    url,
+    options,
+    label: '更新计划',
+    expectedUpdatedAt,
+    optimistic: () => {
+      const idx = state.data.plans.findIndex((p) => String(p.id) === String(id));
+      if (idx >= 0) state.data.plans[idx] = { ...state.data.plans[idx], ...payload.data };
+      renderRoutesPlans();
+      saveSnapshot();
+    },
+  });
+}
+
+function buildPlanMarkdown(data) {
+  const lines = ['---'];
+  lines.push(`plan_type: ${data.plan_type || 'trip'}`);
+  lines.push(`date: "${data.date}"`);
+  if (data.route) lines.push(`route: "${data.route}"`);
+  if (data.distance_km != null) lines.push(`distance_km: ${data.distance_km}`);
+  if (data.elevation_gain_m != null) lines.push(`elevation_gain_m: ${data.elevation_gain_m}`);
+  if (data.estimated_hours != null) lines.push(`estimated_hours: ${data.estimated_hours}`);
+  if (data.recovery_days != null) lines.push(`recovery_days: ${data.recovery_days}`);
+  if (data.intensity_level) lines.push(`intensity_level: ${data.intensity_level}`);
+  if (data.notes) lines.push(`notes: "${data.notes}"`);
+  lines.push('---');
+  return lines.join('\n');
+}
+
+function openAddPlan(plan = null) {
+  if (!state.token) { toast('请先连接后再添加计划', 'warn'); return; }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const typeSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: 'trip' }, '行程 trip'),
+    el('option', { value: 'recovery' }, '恢复 recovery')
+  );
+  if (plan && plan.plan_type) typeSel.value = plan.plan_type;
+  const dateInput = el('input', { type: 'date', class: 'gear-select', value: plan ? fmtDate(plan.date) : today, style: 'width:100%;' });
+  const routeInput = el('input', { type: 'text', class: 'gear-select', value: plan ? plan.route || '' : '', placeholder: '路线名称（恢复计划可留空）', style: 'width:100%;' });
+  const distInput = el('input', { type: 'number', class: 'gear-select', value: plan && plan.distance_km != null ? plan.distance_km : '', step: '0.1', placeholder: '公里', style: 'width:100%;' });
+  const gainInput = el('input', { type: 'number', class: 'gear-select', value: plan && plan.elevation_gain_m != null ? plan.elevation_gain_m : '', placeholder: '米', style: 'width:100%;' });
+  const hoursInput = el('input', { type: 'number', class: 'gear-select', value: plan && plan.estimated_hours != null ? plan.estimated_hours : '', step: '0.1', placeholder: '小时', style: 'width:100%;' });
+  const recoveryInput = el('input', { type: 'number', class: 'gear-select', value: plan && plan.recovery_days != null ? plan.recovery_days : '', placeholder: '天', style: 'width:100%;' });
+  const intensitySel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: '' }, '（未选择）'),
+    el('option', { value: 'low' }, '低 low'),
+    el('option', { value: 'moderate' }, '中 moderate'),
+    el('option', { value: 'high' }, '高 high'),
+    el('option', { value: 'extreme' }, '极高 extreme')
+  );
+  if (plan && plan.intensity_level) intensitySel.value = plan.intensity_level;
+  const notesInput = el('textarea', { class: 'gear-select', rows: 3, placeholder: '备注', style: 'width:100%;' }, plan && plan.notes ? plan.notes : '');
+
+  const form = el('div', { class: 'recommend-form' },
+    el('div', { class: 'form-row' }, el('label', {}, '类型 *'), typeSel),
+    el('div', { class: 'form-row' }, el('label', {}, '日期 *'), dateInput),
+    el('div', { class: 'form-row' }, el('label', {}, '路线'), routeInput),
+    el('div', { class: 'form-row' }, el('label', {}, '距离 (km)'), distInput),
+    el('div', { class: 'form-row' }, el('label', {}, '爬升 (m)'), gainInput),
+    el('div', { class: 'form-row' }, el('label', {}, '预计时长 (h)'), hoursInput),
+    el('div', { class: 'form-row' }, el('label', {}, '恢复天数'), recoveryInput),
+    el('div', { class: 'form-row' }, el('label', {}, '强度'), intensitySel),
+    el('div', { class: 'form-row' }, el('label', {}, '备注'), notesInput)
+  );
+
+  const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, plan ? '保存修改' : '添加计划');
+  saveBtn.addEventListener('click', async () => {
+    const plan_type = typeSel.value;
+    const date = dateInput.value;
+    if (!date) { toast('请填写日期', 'warn'); return; }
+    const data = { plan_type, date };
+    const route = routeInput.value.trim(); if (route) data.route = route;
+    const d = Number(distInput.value); if (!isNaN(d) && d >= 0) data.distance_km = d;
+    const g = Number(gainInput.value); if (!isNaN(g)) data.elevation_gain_m = g;
+    const h = Number(hoursInput.value); if (!isNaN(h) && h >= 0) data.estimated_hours = h;
+    const r = Number(recoveryInput.value); if (!isNaN(r) && r >= 0) data.recovery_days = r;
+    if (intensitySel.value) data.intensity_level = intensitySel.value;
+    const notes = notesInput.value.trim(); if (notes) data.notes = notes;
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      const payload = { data, raw_markdown: buildPlanMarkdown(data) };
+      if (plan && plan.id) {
+        await fetchUpdatePlan(state.apiUrl, state.token, plan.id, payload);
+      } else {
+        await fetchSavePlan(state.apiUrl, state.token, payload);
+      }
+      toast('计划已保存', 'success');
+      close();
+      await loadAndRender(true);
+    } catch (err) {
+      toast(err.message || '保存失败', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = plan ? '保存修改' : '添加计划';
+    }
+  });
+
+  const close = showModal(plan ? '编辑计划' : '添加计划', form, [saveBtn, el('button', { class: 'btn' }, '关闭')]);
+}
+
+function renderPlansOnly(container) {
+  const plans = [...state.data.plans].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const headerRow = el('div', { class: 'section-title', style: 'justify-content:space-between;margin-top:24px;' },
+    el('span', {}, `计划（${plans.length}）`),
+    el('button', { class: 'btn-sm btn-primary', 'data-action': 'add-plan' }, '添加计划')
+  );
+  container.appendChild(headerRow);
+  $('.btn-sm[data-action="add-plan"]', headerRow).addEventListener('click', () => openAddPlan());
+
+  if (!plans.length) {
+    container.appendChild(el('div', { class: 'empty' }, '暂无计划'));
+    return;
+  }
+
+  for (const p of plans) {
+    const card = el('div', { class: 'card' });
+    const typeLabel = p.plan_type === 'recovery' ? '恢复' : '行程';
+    const titleRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
+      el('span', {}, `[${typeLabel}] · ${p.route || p.issue || '计划'} · ${fmtDate(p.date)}`),
+      el('div', {},
+        el('button', { class: 'btn-sm', 'data-action': 'edit-plan', 'data-id': String(p.id) }, '编辑'),
+        ' ',
+        el('button', { class: 'btn-sm btn-danger', 'data-action': 'delete-plan', 'data-id': String(p.id) }, '删除')
+      )
+    );
+    card.appendChild(titleRow);
+    const facts = [
+      ['距离', p.distance_km != null ? p.distance_km + ' km' : null],
+      ['爬升', p.elevation_gain_m != null ? p.elevation_gain_m + ' m' : null],
+      ['预计时长', p.estimated_hours != null ? p.estimated_hours + ' h' : null],
+      ['天数', p.days != null ? p.days + ' 天' : null],
+      ['恢复天数', p.recovery_days != null ? p.recovery_days + ' 天' : null],
+      ['强度', p.intensity_level],
+      ['总重量', p.total_weight_g != null ? (p.total_weight_g / 1000).toFixed(2) + ' kg' : null],
+      ['总体积', p.total_volume_l != null ? Number(p.total_volume_l).toFixed(1) + ' L' : null],
+      ['装备数', Array.isArray(p.gear_recommended) ? p.gear_recommended.length + ' 件' : null],
+      ['天气来源', p.plan_type !== 'recovery' && p.weather_source ? { auto: '自动', manual: '手动', fallback: '默认兜底' }[p.weather_source] : null],
+    ].filter(([, v]) => v != null && v !== '');
+    for (const [k, v] of facts) {
+      card.appendChild(el('div', {}, el('span', { class: 'badge' }, k), ' ', String(v)));
+    }
+    if (p.backpack_recommended) {
+      const bp = state.data.gear.find((g) => g.slug === p.backpack_recommended);
+      card.appendChild(el('div', {}, el('span', { class: 'badge' }, '推荐背包'), ' ', bp ? bp.name : p.backpack_recommended));
+    }
+    container.appendChild(card);
+  }
+
+  container.querySelectorAll('.btn-sm[data-action="edit-plan"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const p = plans.find((x) => String(x.id) === id);
+      if (p) openAddPlan(p);
+    });
+  });
+  container.querySelectorAll('.btn-sm[data-action="delete-plan"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const p = plans.find((x) => String(x.id) === id);
+      if (!p) return;
+      if (!confirm(`确认删除计划「${p.route || '未命名'} · ${fmtDate(p.date)}」？`)) return;
+      try {
+        await fetchDelete(state.apiUrl, state.token, 'plans', id);
+        toast('计划已删除', 'success');
+        await loadAndRender(true);
+      } catch (err) {
+        toast(err.message || '删除失败', 'error');
+      }
+    });
+  });
+}
+
+// ---------- 主渲染函数：整合路线 + 计划到同一个视图 ----------
+
+function renderRoutesPlans() {
+  const view = viewEl('routes-plans');
+  clearViewKeepSkeleton(view);
+  // 先渲染路线库
+  renderRoutesOnly(view);
+  // 再渲染计划（带上边距）
+  renderPlansOnly(view);
+}
