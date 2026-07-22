@@ -33,7 +33,26 @@ function getCurrentPeriodKey(goalType) {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
+function isCustomGoal(periodKey) {
+  return periodKey.startsWith('custom:');
+}
+
+function parseCustomPeriod(periodKey) {
+  // format: custom:YYYY-MM-DD:YYYY-MM-DD
+  const parts = periodKey.split(':');
+  if (parts.length === 3) {
+    return { start: parts[1], end: parts[2] };
+  }
+  return null;
+}
+
 function getPeriodRangeForGoal(periodKey, goalType) {
+  // 自定义日期范围
+  const custom = parseCustomPeriod(periodKey);
+  if (custom) {
+    return custom;
+  }
+  // 固定周期
   const start = periodKey;
   let end;
   if (isWeeklyGoal(goalType)) {
@@ -67,21 +86,20 @@ function computeGoalProgress(goal, activities) {
 }
 
 function getCurrentPhase(periodKey, goalType) {
-  // 简化周期模型：以 4 周为一个微周期，按当前日期相对周期起点分阶段
-  const start = new Date(periodKey + 'T00:00:00');
+  // 自定义目标：从自定义日期范围计算当前在哪个阶段
+  const range = getPeriodRangeForGoal(periodKey, goalType);
+  const start = new Date(range.start + 'T00:00:00');
+  const end = new Date(range.end + 'T00:00:00');
   const now = new Date();
+  const totalDays = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
   const days = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
-  const cycleDays = isWeeklyGoal(goalType) ? 7 : 28;
-  const dayInCycle = days % cycleDays;
-  if (isWeeklyGoal(goalType)) {
-    if (dayInCycle < 2) return { key: 'base', label: '基础/恢复', desc: '周初以低强度有氧或恢复为主' };
-    if (dayInCycle < 5) return { key: 'build', label: '强化积累', desc: '周中逐步增加负荷' };
-    return { key: 'peak', label: '峰值/巩固', desc: '周末可安排一次长距离或强度课' };
-  }
-  if (dayInCycle < 7) return { key: 'base', label: '基础期', desc: '建立有氧基础，控制强度' };
-  if (dayInCycle < 14) return { key: 'build', label: '强化期', desc: '逐步增加距离/爬升' };
-  if (dayInCycle < 21) return { key: 'peak', label: '巅峰期', desc: '达到周期内最大负荷' };
-  return { key: 'recovery', label: '恢复期', desc: '主动减量，让身体吸收训练' };
+
+  // 统一按 25% 分四阶段
+  const pct = totalDays <= 7 ? days / totalDays : days / totalDays;
+  if (pct < 0.25) return { key: 'base', label: '基础/起步', desc: '周期前期逐步推进' };
+  if (pct < 0.50) return { key: 'build', label: '积累', desc: '稳步增加训练量' };
+  if (pct < 0.75) return { key: 'peak', label: '峰值', desc: '达到周期计划峰值' };
+  return { key: 'recovery', label: '收尾', desc: '减量准备赛后恢复' };
 }
 
 function formatGoalAdvice(goals, activities, bodyLogs) {
@@ -143,21 +161,84 @@ function openAddGoal(goal = null) {
   );
   if (goal && goal.goal_type) typeSel.value = goal.goal_type;
 
+  // 周期模式选择：标准周期 / 自定义日期
+  const modeSel = el('div', { class: 'form-row' });
+  const standardRadio = el('input', { type: 'radio', name: 'period-mode', value: 'standard', checked: true });
+  const customRadio = el('input', { type: 'radio', name: 'period-mode', value: 'custom' });
+  modeSel.appendChild(el('label', {}, '周期模式'));
+  const modeWrap = el('div', { style: 'display:flex;gap:16px;padding-top:4px;' },
+    el('label', { style: 'display:flex;gap:4px;align-items:center;' }, standardRadio, '标准周期（周/月）'),
+    el('label', { style: 'display:flex;gap:4px;align-items:center;' }, customRadio, '自定义范围')
+  );
+  modeSel.appendChild(modeWrap);
+
   const today = new Date();
   const defaultType = goal ? goal.goal_type : 'monthly_distance';
-  const defaultPeriod = goal ? goal.period_key : getCurrentPeriodKey(defaultType);
-  const periodInput = el('input', { type: 'date', class: 'gear-select', value: defaultPeriod, style: 'width:100%;' });
+  let defaultStart, defaultEnd;
+  let isCustomDefault = false;
+
+  if (goal && goal.period_key) {
+    if (isCustomGoal(goal.period_key)) {
+      const parsed = parseCustomPeriod(goal.period_key);
+      if (parsed) {
+        defaultStart = parsed.start;
+        defaultEnd = parsed.end;
+        isCustomDefault = true;
+      } else {
+        defaultStart = getCurrentPeriodKey(defaultType);
+        defaultEnd = null;
+      }
+    } else {
+      defaultStart = goal.period_key;
+      defaultEnd = null;
+    }
+  } else {
+    defaultStart = getCurrentPeriodKey(defaultType);
+    defaultEnd = null;
+  }
+
+  const startInput = el('input', { type: 'date', class: 'gear-select', value: defaultStart || '', style: 'width:100%;' });
+  const endInput = el('input', { type: 'date', class: 'gear-select', value: defaultEnd || '', style: 'width:100%;display:' + (isCustomDefault ? 'block' : 'none') + ';' });
+
+  // 切换模式显示/隐藏结束日期
+  standardRadio.addEventListener('change', () => {
+    if (standardRadio.checked) {
+      endInput.style.display = 'none';
+      startInput.value = getCurrentPeriodKey(typeSel.value);
+    }
+  });
+  customRadio.addEventListener('change', () => {
+    if (customRadio.checked) {
+      endInput.style.display = 'block';
+      // 预置默认：今天开始 + 14天后结束
+      if (!startInput.value) {
+        const d = new Date();
+        startInput.value = formatLocalDate(d);
+        d.setDate(d.getDate() + 14);
+        endInput.value = formatLocalDate(d);
+      }
+    }
+  });
+
+  if (isCustomDefault) {
+    customRadio.checked = true;
+    endInput.style.display = 'block';
+  }
+
+  typeSel.addEventListener('change', () => {
+    if (standardRadio.checked) {
+      startInput.value = getCurrentPeriodKey(typeSel.value);
+    }
+  });
 
   const targetInput = el('input', { type: 'number', class: 'gear-select', value: goal ? goal.target_value : '', step: '0.1', placeholder: '目标值', style: 'width:100%;' });
   const notesInput = el('textarea', { class: 'gear-select', rows: 2, placeholder: '备注（可选）', style: 'width:100%;' }, goal && goal.notes ? goal.notes : '');
 
-  typeSel.addEventListener('change', () => {
-    periodInput.value = getCurrentPeriodKey(typeSel.value);
-  });
-
   const form = el('div', { class: 'recommend-form' },
+    modeSel,
     el('div', { class: 'form-row' }, el('label', {}, '目标类型 *'), typeSel),
-    el('div', { class: 'form-row' }, el('label', {}, '周期起点 *（周报选周一，月报选每月1日）'), periodInput),
+    el('div', { class: 'form-row' }, el('label', {}, customRadio.checked ? '开始日期 *' : '周期起点 *（周报选周一，月报选每月1日）'), startInput),
+    el('div', { class: 'form-row' }, el('label', {}, '结束日期 *'), endInput),
     el('div', { class: 'form-row' }, el('label', {}, `目标值 (${goalUnit(typeSel.value)})`), targetInput),
     el('div', { class: 'form-row' }, el('label', {}, '备注'), notesInput)
   );
@@ -165,8 +246,22 @@ function openAddGoal(goal = null) {
   const saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, goal ? '保存修改' : '添加目标');
   saveBtn.addEventListener('click', async () => {
     const goal_type = typeSel.value;
-    const period_key = periodInput.value;
-    if (!period_key) { toast('请填写周期起点', 'warn'); return; }
+    const isCustom = customRadio.checked;
+    let period_key;
+    let start, end;
+
+    if (isCustom) {
+      start = startInput.value.trim();
+      end = endInput.value.trim();
+      if (!start || !end) { toast('自定义模式必须填写开始日期和结束日期', 'warn'); return; }
+      if (start >= end) { toast('开始日期必须早于结束日期', 'warn'); return; }
+      period_key = `custom:${start}:${end}`;
+    } else {
+      start = startInput.value.trim();
+      if (!start) { toast('请填写周期起点', 'warn'); return; }
+      period_key = start;
+    }
+
     const target_value = Number(targetInput.value);
     if (isNaN(target_value) || target_value <= 0) { toast('目标值需大于 0', 'warn'); return; }
 
