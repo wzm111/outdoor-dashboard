@@ -1228,6 +1228,35 @@ function buildReportMarkdown(summaryObj, reportType, start, end) {
   return lines.join('\n');
 }
 
+/** 计算报告周期内的目标完成情况 */
+function computeGoalCompletionForReport(goals, activities, startDate, endDate) {
+  if (!goals || !goals.length) return null;
+
+  const result = [];
+  for (const g of goals) {
+    // 判断目标周期是否和报告周期重叠匹配
+    // 周报匹配周度目标，月报匹配月度目标
+    const goalIsWeekly = isWeeklyGoal(g.goal_type);
+    const reportDays = daysBetween(startDate, endDate);
+    const reportIsWeekly = reportDays <= 7;
+
+    // 类型匹配：周报只匹配周目标，月报只匹配月目标
+    if (reportIsWeekly !== goalIsWeekly) continue;
+
+    // 检查目标周期是否覆盖/匹配报告周期
+    const goalRange = getPeriodRangeForGoal(g.period_key, g.goal_type);
+    // 如果目标周期起点和报告起点一致，视为匹配
+    if (goalRange.start !== startDate) continue;
+
+    const progress = computeGoalProgress(g, activities.filter(a =>
+      a.date && String(a.date) >= startDate && String(a.date) <= endDate
+    ));
+    result.push({ goal: g, progress });
+  }
+
+  return result.length ? result : null;
+}
+
 function renderReportDetailModal(report) {
   const summary = report.data?.summary || report.summary || {};
   const acwr = report.data?.acwr || report.acwr || null;
@@ -1255,6 +1284,32 @@ function renderReportDetailModal(report) {
   }
   if (fatigue && fatigue.score) {
     content.appendChild(el('div', { class: 'report-hint' }, `疲劳评分：${fatigue.score.toFixed(0)} 分（${fatigue.status}）`));
+  }
+
+  // 展示目标完成进度
+  const goals = state.data.goals || [];
+  const activities = state.data.activities || [];
+  const goalCompletions = computeGoalCompletionForReport(goals, activities, report.start_date, report.end_date);
+  if (goalCompletions && goalCompletions.length) {
+    const goalsSection = el('div', { class: 'report-card', style: 'margin-top:16px;padding:12px;' });
+    goalsSection.appendChild(el('h4', {}, '训练目标完成'));
+    for (const { goal, progress } of goalCompletions) {
+      const pct = progress.target > 0 ? Math.min(100, Math.round((progress.current / progress.target) * 100)) : 0;
+      const goalItem = el('div', { class: 'goal-report-item' });
+      goalItem.appendChild(el('div', { class: 'goal-report-header' },
+        el('span', {}, goalTypeLabel(goal.goal_type)),
+        el('span', { class: 'goal-report-pct' }, `${pct}%`)
+      ));
+      const progressWrap = el('div', { class: 'goal-progress-wrap' });
+      progressWrap.appendChild(el('div', { class: 'goal-progress-bar', style: `width:${pct}%` }));
+      goalItem.appendChild(progressWrap);
+      goalItem.appendChild(el('div', { class: 'goal-report-text' },
+        `${progress.current.toFixed(progress.current % 1 === 0 ? 0 : 1)} / ${progress.target.toFixed(progress.target % 1 === 0 ? 0 : 1)} ${goal.unit}` +
+        (progress.remaining > 0 ? ` · 还差 ${progress.remaining.toFixed(1)} ${goal.unit}` : ' · 已达成 🎉')
+      ));
+      goalsSection.appendChild(goalItem);
+    }
+    content.appendChild(goalsSection);
   }
 
   const mdWrap = el('div', { class: 'markdown-body', style: 'margin-top:16px;' });
@@ -1338,9 +1393,32 @@ function renderHistoricalReportsSection() {
         el('span', { class: 'period-label' }, `${r.start_date} ~ ${r.end_date}`),
         el('span', { class: 'period-dates' }, currentType === 'week' ? '周报' : '月报')
       ));
-      const metrics = el('div', { class: 'reports-grid two', style: 'margin-top:8px;' });
+
+      // 计算目标完成概况
+      const goals = state.data.goals || [];
+      const activities = state.data.activities || [];
+      const goalCompletions = computeGoalCompletionForReport(goals, activities, r.start_date, r.end_date);
+      let goalSummary = null;
+      if (goalCompletions && goalCompletions.length) {
+        let completed = 0;
+        let totalPct = 0;
+        for (const gc of goalCompletions) {
+          const pct = gc.progress.target > 0 ? gc.progress.current / gc.progress.target : 0;
+          if (pct >= 1) completed++;
+          totalPct += pct * 100;
+        }
+        const avgPct = Math.round(totalPct / goalCompletions.length);
+        goalSummary = `${completed}/${goalCompletions.length} · ${avgPct}%`;
+      }
+
+      const metrics = goalSummary
+        ? el('div', { class: 'reports-grid three', style: 'margin-top:8px;' })
+        : el('div', { class: 'reports-grid two', style: 'margin-top:8px;' });
       metrics.appendChild(reportStatCard('距离', (summary.distance || 0).toFixed(1), 'km'));
       metrics.appendChild(reportStatCard('活动', String(summary.count || 0), '次'));
+      if (goalSummary) {
+        metrics.appendChild(reportStatCard('目标完成', goalSummary, ''));
+      }
       card.appendChild(metrics);
       if (existsText) {
         card.appendChild(el('div', { class: 'text-dim', style: 'margin-top:8px;font-size:12px;' }, existsText));
