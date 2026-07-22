@@ -7,11 +7,15 @@ function renderAssistant() {
 
   const header = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, 'AI 助手'),
-    el('button', { class: 'btn-sm', 'data-action': 'clear-chat' }, '清空对话')
+    el('div', { style: 'display:flex;gap:8px;' },
+      el('button', { class: 'btn-sm', 'data-action': 'scroll-bottom', title: '跳到最新消息' }, '⬇️ 底部'),
+      el('button', { class: 'btn-sm', 'data-action': 'clear-chat' }, '清空对话')
+    )
   );
   view.appendChild(header);
 
-  const messagesWrap = el('div', { class: 'chat-messages' });
+  // 消息容器：限制最大高度为视口的 60%，超出可滚动，避免页面无限拉长
+  const messagesWrap = el('div', { class: 'chat-messages', style: 'max-height: 60vh; overflow-y: auto;' });
   const quickWrap = el('div', { class: 'chat-quick-questions' });
   const inputArea = el('div', { class: 'chat-input-area' });
   const textarea = el('textarea', { class: 'chat-textarea', rows: 1, placeholder: '问我关于你的训练、恢复、装备或路线的问题…' });
@@ -408,6 +412,10 @@ function renderAssistant() {
     clearChatHistory();
     messages = [];
     renderMessages();
+  });
+
+  $('.btn-sm[data-action="scroll-bottom"]', header).addEventListener('click', () => {
+    scrollToBottom();
   });
 
   renderMessages();
