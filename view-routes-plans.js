@@ -98,6 +98,8 @@ function renderRoutesPlans() {
     const titleRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
       el('span', {}, `[${typeLabel}] · ${p.route || p.issue || '计划'} · ${fmtDate(p.date)}`),
       el('div', {},
+        el('button', { class: 'btn-sm', 'data-action': 'detail-plan', 'data-id': String(p.id) }, '详情'),
+        ' ',
         el('button', { class: 'btn-sm', 'data-action': 'edit-plan', 'data-id': String(p.id) }, '编辑'),
         ' ',
         el('button', { class: 'btn-sm btn-danger', 'data-action': 'delete-plan', 'data-id': String(p.id) }, '删除')
@@ -127,6 +129,13 @@ function renderRoutesPlans() {
   }
 
   // 计划卡片操作按钮事件委托
+  view.querySelectorAll('.btn-sm[data-action="detail-plan"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const p = plans.find((x) => String(x.id) === id);
+      if (p) openPlanDetail(p);
+    });
+  });
   view.querySelectorAll('.btn-sm[data-action="edit-plan"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;

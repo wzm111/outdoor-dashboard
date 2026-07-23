@@ -3163,3 +3163,119 @@ body.modal-open {
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* ---------- 计划详情弹窗（v1.19.0） ---------- */
+.plan-detail-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.plan-detail-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.plan-detail-stat {
+  background: var(--bg-elev);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.plan-detail-stat-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.plan-detail-stat-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plan-detail-section {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.plan-detail-section > .section-title {
+  margin-bottom: 10px;
+}
+.plan-detail-backpack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+.plan-detail-capacity-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.plan-detail-capacity-row .progress-bar {
+  flex: 1;
+}
+.plan-detail-capacity-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.plan-detail-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.plan-detail-fill-good { background: var(--accent) !important; }
+.plan-detail-fill-warn { background: var(--warn) !important; }
+.plan-detail-fill-alert { background: var(--danger) !important; }
+.plan-detail-gear-group {
+  margin-bottom: 12px;
+}
+.plan-detail-gear-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.plan-detail-gear-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.plan-detail-gear-name {
+  color: var(--text);
+}
+.plan-detail-gear-meta {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.plan-detail-risks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.plan-detail-risks .wear-badge {
+  justify-content: flex-start;
+}
+@media (max-width: 640px) {
+  .plan-detail-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .plan-detail-capacity-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .plan-detail-capacity-text {
+    text-align: right;
+  }
+}

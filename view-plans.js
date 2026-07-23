@@ -119,6 +119,132 @@ function openAddPlan(plan = null) {
   const close = showModal(plan ? '编辑计划' : '添加计划', form, [saveBtn, el('button', { class: 'btn' }, '关闭')]);
 }
 
+/** 打开计划详情弹窗：展示概览、背包容量利用率、装备清单和风险提醒。 */
+function openPlanDetail(plan) {
+  const gearMap = new Map((state.data.gear || []).map((g) => [g.slug, g]));
+  const wrap = el('div', { class: 'plan-detail-modal-body' });
+
+  // 1. 概览
+  const overview = el('div', { class: 'plan-detail-overview' });
+  const addStat = (label, value) =>
+    overview.appendChild(el('div', { class: 'plan-detail-stat' },
+      el('div', { class: 'plan-detail-stat-label' }, label),
+      el('div', { class: 'plan-detail-stat-value' }, value != null ? String(value) : '—')
+    ));
+  addStat('路线', plan.route || '—');
+  addStat('日期', fmtDate(plan.date));
+  addStat('天数', plan.days != null ? plan.days + ' 天' : '—');
+  addStat('距离', plan.distance_km != null ? num(plan.distance_km) + ' km' : '—');
+  addStat('爬升', plan.elevation_gain_m != null ? num(plan.elevation_gain_m, 0) + ' m' : '—');
+  addStat('预计时长', plan.estimated_hours != null ? num(plan.estimated_hours) + ' h' : '—');
+  addStat('强度', plan.intensity_level || '—');
+  if (plan.weather && plan.weather.summary) {
+    addStat('天气', `${plan.weather.summary} · ${plan.weather.temp_low_c || '?'}°C ~ ${plan.weather.temp_high_c || '?'}°C`);
+  }
+  wrap.appendChild(overview);
+
+  // 2. 背包 + 容量利用率
+  const totalWeightKg = plan.total_weight_g != null ? (plan.total_weight_g / 1000).toFixed(2) : null;
+  const totalVolumeL = plan.total_volume_l != null ? Number(plan.total_volume_l).toFixed(1) : null;
+  const backpack = plan.backpack_recommended ? gearMap.get(plan.backpack_recommended) : null;
+
+  const backpackSection = el('div', { class: 'plan-detail-section' });
+  backpackSection.appendChild(el('div', { class: 'section-title' }, '背包与装载'));
+
+  if (backpack) {
+    const capacityL = Number(backpack.capacity_l) || 0;
+    const volumeNum = Number(totalVolumeL) || 0;
+    const ratio = capacityL > 0 ? volumeNum / capacityL : 0;
+    let statusCls = 'plan-detail-fill-good';
+    let statusText = '容量充足';
+    if (ratio >= 0.9) { statusCls = 'plan-detail-fill-alert'; statusText = '容量紧张'; }
+    else if (ratio >= 0.7) { statusCls = 'plan-detail-fill-warn'; statusText = '容量适中'; }
+
+    backpackSection.appendChild(el('div', { class: 'plan-detail-backpack-row' },
+      el('span', {}, backpack.name || backpack.slug),
+      capacityL > 0 ? el('span', { class: 'badge' }, `${capacityL} L`) : el('span', { class: 'badge' }, '容量未知')
+    ));
+
+    if (capacityL > 0) {
+      const pct = Math.min(100, Math.round(ratio * 100));
+      backpackSection.appendChild(el('div', { class: 'plan-detail-capacity-row' },
+        el('div', { class: 'progress-bar' },
+          el('div', { class: 'progress-fill ' + statusCls, style: `width:${pct}%;` })
+        ),
+        el('span', { class: 'plan-detail-capacity-text' }, `${pct}% · ${statusText}`)
+      ));
+    }
+
+    const summaryRow = el('div', { class: 'plan-detail-summary-row' });
+    if (totalWeightKg != null) summaryRow.appendChild(el('span', {}, `总重量 ${totalWeightKg} kg`));
+    if (totalVolumeL != null) summaryRow.appendChild(el('span', {}, `总体积 ${totalVolumeL} L`));
+    if (plan.gear_recommended) summaryRow.appendChild(el('span', {}, `装备 ${plan.gear_recommended.length} 件`));
+    backpackSection.appendChild(summaryRow);
+  } else {
+    const summaryRow = el('div', { class: 'plan-detail-summary-row' });
+    if (totalWeightKg != null) summaryRow.appendChild(el('span', {}, `总重量 ${totalWeightKg} kg`));
+    if (totalVolumeL != null) summaryRow.appendChild(el('span', {}, `总体积 ${totalVolumeL} L`));
+    backpackSection.appendChild(summaryRow);
+    if (!totalWeightKg && !totalVolumeL) {
+      backpackSection.appendChild(el('div', { class: 'empty' }, '未生成装备推荐'));
+    }
+  }
+  wrap.appendChild(backpackSection);
+
+  // 3. 装备清单（按类别分组）
+  const gearSection = el('div', { class: 'plan-detail-section' });
+  gearSection.appendChild(el('div', { class: 'section-title' }, '装备清单'));
+
+  const recommendedSlugs = Array.isArray(plan.gear_recommended) ? plan.gear_recommended : [];
+  const recommendedGear = recommendedSlugs
+    .map((slug) => ({ slug, g: gearMap.get(slug) }))
+    .filter((x) => !backpack || x.slug !== backpack.slug); // 背包已在上面展示
+
+  if (!recommendedGear.length) {
+    gearSection.appendChild(el('div', { class: 'empty' }, '暂无装备清单'));
+  } else {
+    const groups = {};
+    for (const { slug, g } of recommendedGear) {
+      const cat = g ? g.category || '未分类' : '未分类';
+      groups[cat] = groups[cat] || [];
+      groups[cat].push({ slug, g });
+    }
+    const sortedCats = Object.keys(groups).sort();
+    for (const cat of sortedCats) {
+      const group = el('div', { class: 'plan-detail-gear-group' });
+      group.appendChild(el('div', { class: 'plan-detail-gear-group-title' }, categoryLabel(cat)));
+      for (const { slug, g } of groups[cat]) {
+        const row = el('div', { class: 'plan-detail-gear-item' },
+          el('span', { class: 'plan-detail-gear-name' }, g ? (g.name || g.slug) : slug),
+          el('span', { class: 'plan-detail-gear-meta' },
+            g ? [
+              g.weight_g != null ? num(g.weight_g, 0) + ' g' : null,
+              g.packed_volume_l != null ? Number(g.packed_volume_l).toFixed(1) + ' L' : null,
+            ].filter(Boolean).join(' · ') : '已在装备库中删除'
+          )
+        );
+        group.appendChild(row);
+      }
+      gearSection.appendChild(group);
+    }
+  }
+  wrap.appendChild(gearSection);
+
+  // 4. 风险提醒
+  if (Array.isArray(plan.risks) && plan.risks.length) {
+    const riskSection = el('div', { class: 'plan-detail-section' });
+    riskSection.appendChild(el('div', { class: 'section-title' }, '风险提醒'));
+    const riskBox = el('div', { class: 'plan-detail-risks' });
+    for (const r of plan.risks) {
+      riskBox.appendChild(el('div', { class: 'wear-badge wear-alert' }, String(r)));
+    }
+    riskSection.appendChild(riskBox);
+    wrap.appendChild(riskSection);
+  }
+
+  showModal(plan.route || '计划详情', wrap, [el('button', { class: 'btn' }, '关闭')]);
+}
+
 function renderPlans() {
   const plans = [...state.data.plans].sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const view = viewEl('plans');
@@ -141,6 +267,8 @@ function renderPlans() {
     const titleRow = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
       el('span', {}, `[${typeLabel}] · ${p.route || p.issue || '计划'} · ${fmtDate(p.date)}`),
       el('div', {},
+        el('button', { class: 'btn-sm', 'data-action': 'detail-plan', 'data-id': String(p.id) }, '详情'),
+        ' ',
         el('button', { class: 'btn-sm', 'data-action': 'edit-plan', 'data-id': String(p.id) }, '编辑'),
         ' ',
         el('button', { class: 'btn-sm btn-danger', 'data-action': 'delete-plan', 'data-id': String(p.id) }, '删除')
@@ -170,6 +298,13 @@ function renderPlans() {
   }
 
   // 计划卡片操作按钮事件委托
+  view.querySelectorAll('.btn-sm[data-action="detail-plan"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const p = plans.find((x) => String(x.id) === id);
+      if (p) openPlanDetail(p);
+    });
+  });
   view.querySelectorAll('.btn-sm[data-action="edit-plan"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
