@@ -5,6 +5,9 @@ function renderAssistant() {
   const view = viewEl('assistant');
   clearViewKeepSkeleton(view);
 
+  // v1.21.0: 意图模式状态（localStorage 记忆）
+  let chatMode = getChatMode();
+
   const header = el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, 'AI 助手'),
     el('div', { style: 'display:flex;gap:8px;' },
@@ -13,6 +16,38 @@ function renderAssistant() {
     )
   );
   view.appendChild(header);
+
+  // 意图模式切换器：💬 对话 / 📊 分析 / ➕ 创建
+  const modeBar = el('div', { class: 'chat-mode-bar' });
+  const modeBtns = {};
+  function paintModeBar() {
+    modeBar.innerHTML = '';
+    for (const opt of CHAT_MODE_OPTIONS) {
+      const btn = el('button', {
+        type: 'button',
+        class: 'chat-mode-btn' + (opt.key === chatMode ? ' chat-mode-btn-active' : ''),
+        'data-mode': opt.key,
+        title: opt.desc,
+      }, opt.label);
+      btn.addEventListener('click', () => {
+        chatMode = opt.key;
+        setChatMode(chatMode);
+        paintModeBar();
+        updatePlaceholder();
+      });
+      modeBtns[opt.key] = btn;
+      modeBar.appendChild(btn);
+    }
+  }
+  const modeDesc = el('div', { class: 'chat-mode-desc' });
+  function updatePlaceholder() {
+    const opt = CHAT_MODE_OPTIONS.find((o) => o.key === chatMode);
+    if (opt) modeDesc.textContent = opt.desc;
+  }
+  paintModeBar();
+  updatePlaceholder();
+  view.appendChild(modeBar);
+  view.appendChild(modeDesc);
 
   // 消息容器：限制最大高度为视口的 60%，超出可滚动，避免页面无限拉长
   const messagesWrap = el('div', { class: 'chat-messages', style: 'max-height: 60vh; overflow-y: auto;' });
@@ -338,11 +373,13 @@ function renderAssistant() {
     isLoading = true;
     renderMessages();
 
-    const context = buildAssistantContext(state.data, classifyUserIntent(text));
+    // v1.21.0: chat/analyze 模式强制走 query 上下文（不被「跑步/徒步」等关键词误判为创建）
+    const intent = (chatMode === 'chat' || chatMode === 'analyze') ? 'query' : classifyUserIntent(text);
+    const context = buildAssistantContext(state.data, intent);
     const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }));
 
     try {
-      const res = await fetchAssistantChat(state.apiUrl, state.token, apiMessages, context);
+      const res = await fetchAssistantChat(state.apiUrl, state.token, apiMessages, context, chatMode);
       if (!res.ok) {
         throw new Error(res.error || 'AI 回复失败');
       }

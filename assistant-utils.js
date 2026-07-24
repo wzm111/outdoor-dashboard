@@ -4,6 +4,36 @@
 const CHAT_HISTORY_KEY = 'outdoor_assistant_chat_history';
 const CHAT_HISTORY_LIMIT = 50;
 const CHAT_MAX_MESSAGE_LENGTH = 2000;
+const CHAT_MODE_KEY = 'outdoor_assistant_chat_mode';
+
+/** 用户在 AI 助手显式选择的模式：
+ *  - chat：自由对话，只读数据给答案，不创建记录
+ *  - analyze：分析模式，强调趋势/对比/建议，不创建记录
+ *  - create：创建模式，按关键词分类，AI 可能返回 proposed_action
+ *  默认 'chat'，避免被"跑步/徒步"等关键词误判。
+ */
+const CHAT_MODE_OPTIONS = [
+  { key: 'chat', label: '💬 对话', desc: '问什么答什么，不创建记录' },
+  { key: 'analyze', label: '📊 分析', desc: '数据趋势、对比、训练建议' },
+  { key: 'create', label: '➕ 创建', desc: '明确要记录活动/身体/计划' },
+];
+
+function getChatMode() {
+  try {
+    const v = localStorage.getItem(CHAT_MODE_KEY);
+    return (v === 'chat' || v === 'analyze' || v === 'create') ? v : 'chat';
+  } catch (e) {
+    return 'chat';
+  }
+}
+
+function setChatMode(mode) {
+  try {
+    localStorage.setItem(CHAT_MODE_KEY, mode);
+  } catch (e) {
+    // ignore
+  }
+}
 
 /** 将本地 Date 对象格式化为 YYYY-MM-DD，避免 toISOString() 转到 UTC 导致日期错位。 */
 function formatLocalDate(d) {

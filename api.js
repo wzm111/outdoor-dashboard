@@ -274,7 +274,7 @@ async function fetchAiActivity(apiUrl, token, text) {
 }
 
 /** AI 助手聊天：发送对话历史与数据上下文，返回 Markdown 答案。 */
-async function fetchAssistantChat(apiUrl, token, messages, context) {
+async function fetchAssistantChat(apiUrl, token, messages, context, mode = 'create') {
   const res = await fetchWithTimeout(`${apiBase(apiUrl)}/assistant/chat`, {
     method: 'POST',
     headers: {
@@ -282,7 +282,7 @@ async function fetchAssistantChat(apiUrl, token, messages, context) {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ messages, context }),
+    body: JSON.stringify({ messages, context, mode }),
   }, 60000, 'AI 助手');
   if (!res.ok) {
     const t = await res.text().catch(() => '');

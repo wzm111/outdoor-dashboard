@@ -2537,6 +2537,36 @@ body.modal-open {
 }
 
 /* AI 助手对话 */
+.chat-mode-bar {
+  display: flex;
+  gap: 6px;
+  padding: 6px 0 0;
+}
+.chat-mode-btn {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elev);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.chat-mode-btn:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+.chat-mode-btn-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.chat-mode-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 2px 4px 6px;
+}
 .chat-messages {
   flex: 1;
   min-height: 0;
