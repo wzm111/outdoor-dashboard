@@ -44,6 +44,7 @@ function buildBodyMarkdown(data) {
   if (data.knee_status) lines.push(`knee_status: ${data.knee_status}`);
   if (data.mood != null) lines.push(`mood: ${data.mood}`);
   if (data.weight_kg != null) lines.push(`weight_kg: ${data.weight_kg}`);
+  if (data.resting_hr != null) lines.push(`resting_hr: ${data.resting_hr}`);
   if (data.notes) lines.push(`notes: "${data.notes}"`);
   lines.push('---');
   return lines.join('\n');
@@ -67,6 +68,7 @@ function openAddBody(log = null) {
   if (log && log.knee_status) kneeSel.value = log.knee_status;
   const moodInput = el('input', { type: 'number', class: 'gear-select', value: log && log.mood != null ? log.mood : '', min: '1', max: '10', placeholder: '1-10', style: 'width:100%;' });
   const weightInput = el('input', { type: 'number', class: 'gear-select', value: log && log.weight_kg != null ? log.weight_kg : '', step: '0.1', placeholder: 'kg', style: 'width:100%;' });
+  const restingHrInput = el('input', { type: 'number', class: 'gear-select', value: log && log.resting_hr != null ? log.resting_hr : '', min: '30', max: '120', placeholder: '晨起静息心率 bpm', style: 'width:100%;' });
   const notesInput = el('textarea', { class: 'gear-select', rows: 3, placeholder: '其他身体感受、伤病等', style: 'width:100%;' }, log && log.notes ? log.notes : '');
 
   const form = el('div', { class: 'recommend-form' },
@@ -77,6 +79,7 @@ function openAddBody(log = null) {
     el('div', { class: 'form-row' }, el('label', {}, '膝盖状态'), kneeSel),
     el('div', { class: 'form-row' }, el('label', {}, '心情 1-10'), moodInput),
     el('div', { class: 'form-row' }, el('label', {}, '体重 (kg)'), weightInput),
+    el('div', { class: 'form-row' }, el('label', {}, '静息心率 (bpm)'), restingHrInput),
     el('div', { class: 'form-row' }, el('label', {}, '备注'), notesInput)
   );
 
@@ -93,6 +96,7 @@ function openAddBody(log = null) {
     if (kneeSel.value) data.knee_status = kneeSel.value;
     const m = Number(moodInput.value); if (!isNaN(m)) data.mood = m;
     const w = Number(weightInput.value); if (!isNaN(w) && w > 0) data.weight_kg = w;
+    const rhr = Number(restingHrInput.value); if (!isNaN(rhr) && rhr > 0) data.resting_hr = rhr;
     const notes = notesInput.value.trim(); if (notes) data.notes = notes;
 
     saveBtn.disabled = true;
@@ -172,6 +176,7 @@ function renderBodyAiResult(container, parsed, provider) {
     ['膝盖状态', parsed.knee_status],
     ['心情', parsed.mood],
     ['体重', parsed.weight_kg != null ? parsed.weight_kg + ' kg' : null],
+    ['静息心率', parsed.resting_hr != null ? parsed.resting_hr + ' bpm' : null],
     ['备注', parsed.notes],
   ].filter(([, v]) => v != null && v !== '');
   const list = el('ul', { class: 'detail-list' });
@@ -217,7 +222,7 @@ function renderBody() {
   const quickWrap = el('div', { class: 'report-card body-quick-card' });
   quickWrap.appendChild(el('h3', {}, '快速记录'));
   const quickInput = el('input', { type: 'text', class: 'gear-select body-quick-input', placeholder: '例如：昨晚睡了7小时，今天疲劳3，膝盖良好' });
-  const quickHint = el('div', { class: 'body-quick-hint' }, '支持：睡眠/疲劳/酸痛/膝盖/心情/体重/日期/备注');
+  const quickHint = el('div', { class: 'body-quick-hint' }, '支持：睡眠/疲劳/酸痛/膝盖/心情/体重/静息心率/日期/备注');
 
   const templateChips = el('div', { class: 'body-quick-chips' });
   for (const t of BODY_QUICK_TEMPLATES) {
@@ -264,6 +269,7 @@ function renderBody() {
       ['膝盖状态', parsed.knee_status],
       ['心情', parsed.mood],
       ['体重', parsed.weight_kg != null ? parsed.weight_kg + ' kg' : null],
+      ['静息心率', parsed.resting_hr != null ? parsed.resting_hr + ' bpm' : null],
       ['备注', parsed.notes],
     ].filter(([, v]) => v != null && v !== '');
     if (facts.length) {
@@ -319,6 +325,9 @@ function renderBody() {
   view.appendChild(lineChartCard('疲劳度 (1-10)', logs, 'fatigue', '#e0a458', 0, 10));
   view.appendChild(lineChartCard('睡眠 (小时)', logs, 'sleep_hours', '#4fb477', 0, 12));
   view.appendChild(lineChartCard('肌肉酸痛 (1-10)', logs, 'muscle_soreness', '#e06c75', 0, 10));
+  if (logs.some((b) => b.resting_hr != null)) {
+    view.appendChild(lineChartCard('晨起静息心率 (bpm)', logs, 'resting_hr', '#9b59b6'));
+  }
 
   // 最近记录表格：支持编辑/删除
   const recent = logs.slice().reverse();
@@ -332,6 +341,7 @@ function renderBody() {
     el('th', {}, '膝盖'),
     el('th', {}, '心情'),
     el('th', {}, '体重'),
+    el('th', {}, '静息心率'),
     el('th', {}, '备注'),
     el('th', {}, '操作')
   )));
@@ -345,6 +355,7 @@ function renderBody() {
       el('td', {}, log.knee_status || '—'),
       el('td', {}, log.mood != null ? num(log.mood, 0) : '—'),
       el('td', {}, log.weight_kg != null ? num(log.weight_kg, 1) : '—'),
+      el('td', {}, log.resting_hr != null ? num(log.resting_hr, 0) : '—'),
       el('td', {}, log.notes || '—'),
       el('td', { class: 'actions' },
         el('button', { class: 'btn-sm', 'data-action': 'edit', style: 'margin-right:6px;' }, '编辑'),
@@ -365,7 +376,7 @@ function renderBody() {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
-  labelTableCells(table, ['日期', '睡眠', '疲劳', '酸痛', '膝盖', '心情', '体重', '备注', '操作']);
+  labelTableCells(table, ['日期', '睡眠', '疲劳', '酸痛', '膝盖', '心情', '体重', '静息心率', '备注', '操作']);
   tableWrap.appendChild(table);
   view.appendChild(tableWrap);
 }

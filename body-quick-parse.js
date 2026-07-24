@@ -63,6 +63,13 @@ function parseBodyQuickText(text, defaultDate = null) {
     if (!isNaN(v)) data.weight_kg = v;
   }
 
+  // 静息心率：静息心率/晨起心率/RHR X(bpm/次)
+  const rhrMatch = text.match(/(?:静息心率|晨起心率|rhr)\s*(\d+(?:\.\d+)?)\s*(bpm|次)?/i);
+  if (rhrMatch) {
+    const v = Number(rhrMatch[1]);
+    if (!isNaN(v)) data.resting_hr = v;
+  }
+
   // 日期：前天/昨天/今天/明天/后天 或 7月15日 / 2026-07-15
   const dateMatch = text.match(/(前天|昨天|今天|明天|后天)|(\d{1,2})月(\d{1,2})日|(\d{4}-\d{2}-\d{2})/);
   if (dateMatch) {
@@ -89,6 +96,7 @@ function parseBodyQuickText(text, defaultDate = null) {
     /膝盖(?:状态)?\s*(?:良好|正常|一般|不佳|差|good|fair|poor)/gi,
     /心情\s*(?:\d+(?:\.\d+)?|[一二两三四五六七八九十]+)/gi,
     /体重\s*(?:\d+(?:\.\d+)?)\s*(?:kg|公斤|千克)?/gi,
+    /(?:静息心率|晨起心率|rhr)\s*(?:\d+(?:\.\d+)?)\s*(?:bpm|次)?/gi,
     /(?:前天|昨天|今天|明天|后天)/g,
     /\d{1,2}月\d{1,2}日/g,
     /\d{4}-\d{2}-\d{2}/g,

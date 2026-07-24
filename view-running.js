@@ -32,19 +32,62 @@ const HR_ZONES = [
   { key: 'Z5', name: '无氧', lo: 0.90, hi: 2.0, color: '#f87171' },
 ];
 
-function hrZoneOf(avgHr, maxHr) {
-  if (!avgHr || !maxHr) return null;
-  const ratio = avgHr / maxHr;
-  return HR_ZONES.find((z) => ratio >= z.lo && ratio < z.hi) || null;
+/** 根据 profile 和身体日志构建当前的心率分区模型。
+ *  优先 Karvonen（心率储备）模型；缺失静息心率时回退 %HRmax。 */
+function hrZonesForProfile(profile, bodyLogs) {
+  profile = profile || {};
+  const maxHr = Number(profile.usual_heart_rate_max) || (profile.age ? 220 - Number(profile.age) : 185);
+
+  // 取最近一条有 resting_hr 的身体日志；回退 profile.resting_heart_rate；默认 60
+  let restingHr = Number(profile.resting_heart_rate) || 60;
+  let rhrSource = '默认 60';
+  const sortedLogs = (bodyLogs || [])
+    .filter((b) => Number(b.resting_hr) > 0)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  if (sortedLogs.length) {
+    restingHr = Number(sortedLogs[0].resting_hr);
+    rhrSource = `身体日志 ${fmtDate(sortedLogs[0].date)}`;
+  } else if (profile.resting_heart_rate) {
+    rhrSource = '体能档案';
+  }
+
+  const reserve = Math.max(1, maxHr - restingHr);
+  // 只有当静息心率来自真实数据（身体日志或 profile）时才用 Karvonen
+  // 默认 60 是猜测，不应触发 Karvonen —— 否则会高估 Z2/Z3 区间
+  const useKarvonen = rhrSource !== '默认 60';
+  const toBpm = (ratio) => {
+    if (ratio >= 2) return maxHr;
+    return useKarvonen
+      ? Math.round(restingHr + ratio * reserve)
+      : Math.round(ratio * maxHr);
+  };
+
+  return {
+    maxHr,
+    restingHr,
+    rhrSource,
+    reserve,
+    useKarvonen,
+    zones: HR_ZONES.map((z) => ({
+      ...z,
+      loBpm: toBpm(z.lo),
+      hiBpm: toBpm(z.hi),
+    })),
+  };
+}
+
+function hrZoneOf(avgHr, model) {
+  if (!avgHr || !model) return null;
+  return model.zones.find((z) => avgHr >= z.loBpm && avgHr < z.hiBpm) || null;
 }
 
 /** 汇总跑步活动：按日期升序，附配速/心率分区。 */
-function collectRuns(activities, maxHr) {
+function collectRuns(activities, model) {
   return (activities || [])
     .filter((a) => isRunning(a) && Number(a.distance_km) > 0)
     .map((a) => {
       const pace = runPaceMinPerKm(a);
-      const zone = hrZoneOf(Number(a.avg_hr), maxHr);
+      const zone = hrZoneOf(Number(a.avg_hr), model);
       return { ...a, _pace: pace, _zone: zone };
     })
     .sort((a, b) => String(a.date).localeCompare(String(b.date)) || (a.sequence || 0) - (b.sequence || 0));
@@ -153,12 +196,14 @@ function renderRunning() {
   clearViewKeepSkeleton(view);
 
   const profile = state.data.profile || {};
-  const maxHr = Number(profile.usual_heart_rate_max) || (profile.age ? 220 - Number(profile.age) : 185);
-  const runs = collectRuns(state.data.activities, maxHr);
+  const bodyLogs = state.data.body_logs || [];
+  const model = hrZonesForProfile(profile, bodyLogs);
+  const maxHr = model.maxHr;
+  const runs = collectRuns(state.data.activities, model);
 
   view.appendChild(el('div', { class: 'section-title', style: 'justify-content:space-between;' },
     el('span', {}, '跑步分析'),
-    el('span', { class: 'text-dim' }, `最大心率按 ${maxHr} 估算分区`)
+    el('span', { class: 'text-dim' }, `${model.useKarvonen ? 'Karvonen' : '%HRmax'} 分区 · 最大心率 ${maxHr} · 静息心率 ${model.restingHr}（${model.rhrSource}）`)
   ));
 
   if (!runs.length) {
@@ -235,13 +280,58 @@ function renderRunning() {
     // 分区说明行
     const legend = el('div', { class: 'hr-zone-legend' });
     for (const zb of zoneDist) {
-      const lo = Math.round(zb.zone.lo * maxHr);
-      const hi = zb.zone.hi >= 2 ? '∞' : Math.round(zb.zone.hi * maxHr);
+      const mz = model.zones.find((z) => z.key === zb.zone.key);
+      const lo = mz ? mz.loBpm : Math.round(zb.zone.lo * maxHr);
+      const hi = mz ? mz.hiBpm : (zb.zone.hi >= 2 ? '∞' : Math.round(zb.zone.hi * maxHr));
       legend.appendChild(el('span', { class: 'hr-zone-chip', style: `--zone-color:${zb.zone.color}` },
         `${zb.zone.key} ${zb.zone.name} ${lo}–${hi} · ${zb.count} 次`));
     }
     card.appendChild(legend);
     view.appendChild(card);
+
+    // ---------- 训练强度分布建议 ----------
+    const totalZoned = zoneDist.reduce((s, x) => s + x.dist, 0);
+    if (totalZoned > 0) {
+      const pct = (k) => {
+        const zb = zoneDist.find((x) => x.zone.key === k);
+        return zb ? zb.dist / totalZoned : 0;
+      };
+      const p1 = pct('Z1'), p2 = pct('Z2'), p3 = pct('Z3'),
+            p4 = pct('Z4'), p5 = pct('Z5');
+      const easy = p1 + p2;
+      const hard = p4 + p5;
+      let level = 'balanced';
+      let advice = '强度分布比较均衡，继续保持当前训练结构。';
+      let style = 'tip-info';
+      if (p3 >= 0.6 && easy < 0.2) {
+        level = 'trap';
+        advice = '你的跑步强度集中在 Z3（节奏区），低强度有氧跑偏少。长期如此可能抑制有氧基础提升。建议每周安排 1–2 次真正的 Z2 轻松跑，心率控制在 Z2 区间，用「能边跑边聊天」的强度完成。';
+        style = 'tip-warn';
+      } else if (easy >= 0.4 && hard <= 0.2) {
+        level = 'aerobic-good';
+        advice = '有氧基础结构良好，Z1+Z2 占比充足。可以适度增加 1 次 Z4 阈值跑或 Z5 间歇来提升上限。';
+        style = 'tip-good';
+      } else if (hard >= 0.4) {
+        level = 'hard';
+        advice = '高强度训练占比较高，记得穿插足够的 Z1/Z2 主动恢复跑，避免过度训练。';
+        style = 'tip-warn';
+      }
+      const tipCard = el('div', { class: `report-card hr-intensity-tip ${style}` });
+      tipCard.appendChild(el('h3', {}, '训练强度分布解读'));
+      const pctLine = el('div', { class: 'hr-intensity-pcts' });
+      for (const zb of zoneDist) {
+        const p = (zb.dist / totalZoned) * 100;
+        pctLine.appendChild(el('span', { class: 'hr-intensity-pct', style: `--zone-color:${zb.zone.color}` },
+          `${zb.zone.key} ${p.toFixed(0)}%`));
+      }
+      tipCard.appendChild(pctLine);
+      tipCard.appendChild(el('p', { class: 'hr-intensity-advice' }, advice));
+      if (level === 'trap' && !profile.resting_heart_rate) {
+        tipCard.appendChild(el('p', { class: 'text-dim', style: 'font-size:12px;margin-top:6px;' },
+          '💡 提示：填入晨起静息心率（身体 → 添加记录）可获得更准确的 Karvonen 分区。'));
+      }
+      view.appendChild(tipCard);
+    }
   }
 
   // ---------- 配速趋势 ----------
