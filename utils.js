@@ -472,6 +472,11 @@ function isCycling(a) {
   return /cycl|骑行|骑车/i.test(String(a.type || ''));
 }
 
+/** 判断活动是否为游泳。 */
+function isSwimming(a) {
+  return /swim|游泳|泳池|swimming|pool_swim|open_water/i.test(String(a.type || ''));
+}
+
 /** 由距离和时长计算平均速度（km/h）。 */
 function avgSpeedKmh(distanceKm, hours) {
   const d = Number(distanceKm);

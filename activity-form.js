@@ -22,10 +22,13 @@ function openAddActivity(activity = null) {
     el('option', { value: 'hiking' }, '徒步 hiking'),
     el('option', { value: 'climbing' }, '攀岩 climbing'),
     el('option', { value: 'cycling' }, '骑行 cycling'),
+    el('option', { value: 'swimming' }, '游泳（泳池）swimming'),
+    el('option', { value: 'open_water_swim' }, '开放水域 open_water_swim'),
     el('option', { value: 'other' }, '其他 other')
   );
   if (activity && activity.type) typeSel.value = activity.type;
   const distInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.distance_km != null ? activity.distance_km : '', step: '0.01', placeholder: '公里', style: 'width:100%;' });
+  const distRow = el('div', { class: 'form-row' }, el('label', {}, '距离 (km) *'), distInput);
   const gainInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.elevation_gain_m != null ? activity.elevation_gain_m : '', placeholder: '米', style: 'width:100%;' });
   const lossInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.elevation_loss_m != null ? activity.elevation_loss_m : '', placeholder: '米（可选）', style: 'width:100%;' });
   const durationInput = el('input', { type: 'text', class: 'gear-select', value: activity && activity.duration_hours != null ? fmtDuration(activity.duration_hours) : '', placeholder: '如 29:38 / 1:30:00 / 1.5（小时）', style: 'width:100%;' });
@@ -253,18 +256,76 @@ function openAddActivity(activity = null) {
     el('div', { class: 'form-row' }, el('label', {}, '平均功率 (W)'), powerInput)
   );
 
+  // ---------- 游泳专项 ----------
+  const swimStyleSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: '' }, '（未选择）'),
+    el('option', { value: 'freestyle' }, '自由泳 freestyle'),
+    el('option', { value: 'breaststroke' }, '蛙泳 breaststroke'),
+    el('option', { value: 'backstroke' }, '仰泳 backstroke'),
+    el('option', { value: 'butterfly' }, '蝶泳 butterfly'),
+    el('option', { value: 'mixed' }, '混合泳 mixed')
+  );
+  if (activity && activity.swim_style) swimStyleSel.value = activity.swim_style;
+  const waterTypeSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: 'pool' }, '泳池 pool'),
+    el('option', { value: 'open_water' }, '开放水域 open_water')
+  );
+  if (activity && activity.water_type) waterTypeSel.value = activity.water_type;
+  // 同步 type 变化与水域自动选择
+  function syncWaterType() {
+    const t = String(typeSel.value || '').toLowerCase();
+    if (t === 'open_water_swim') waterTypeSel.value = 'open_water';
+    else if (t === 'swimming') waterTypeSel.value = 'pool';
+  }
+  typeSel.addEventListener('change', syncWaterType);
+  if (activity) syncWaterType();
+
+  const poolLengthSel = el('select', { class: 'gear-select', style: 'width:100%;' },
+    el('option', { value: '' }, '（未选择）'),
+    el('option', { value: '25' }, '25 m 标准池'),
+    el('option', { value: '50' }, '50 m 长池'),
+    el('option', { value: '33' }, '33 m 短池')
+  );
+  if (activity && activity.pool_length) poolLengthSel.value = String(activity.pool_length);
+  const distanceMInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.distance_m != null ? activity.distance_m : '', step: '1', placeholder: '米', style: 'width:100%;' });
+  const swolfInput = el('input', { type: 'number', class: 'gear-select', value: activity && activity.swolf != null ? activity.swolf : '', placeholder: 'SWOLF（单趟划次+秒数）', style: 'width:100%;' });
+
+  const swimmingSection = el('div', { class: 'sport-fields', 'data-sport': 'swimming' },
+    el('div', { class: 'form-row' }, el('label', {}, '泳姿'), swimStyleSel),
+    el('div', { class: 'form-row' }, el('label', {}, '水域类型'), waterTypeSel),
+    el('div', { class: 'form-row' }, el('label', {}, '泳池长度'), poolLengthSel),
+    el('div', { class: 'form-row' }, el('label', {}, '距离 (m)'), distanceMInput),
+    el('div', { class: 'form-row' }, el('label', {}, 'SWOLF'), swolfInput)
+  );
+
   const sportSections = {
     running: runningSection,
     trail_running: runningSection,
     hiking: hikingSection,
     climbing: climbingSection,
     cycling: cyclingSection,
+    swimming: swimmingSection,
+    open_water_swim: swimmingSection,
   };
 
   function updateSportSections() {
     const sport = activitySport(typeSel.value);
     for (const [key, sec] of Object.entries(sportSections)) {
       sec.hidden = key !== sport;
+    }
+    // 距离字段：游泳时改用米
+    const distLabel = distRow.querySelector('label');
+    if (sport === 'swimming') {
+      distLabel.textContent = '距离 (m) *';
+      distInput.placeholder = '米（如 1500）';
+      distInput.step = '1';
+      // 若是编辑现有游泳记录且已有 distance_m，自动回填
+      if (activity && activity.distance_m != null) distInput.value = activity.distance_m;
+    } else {
+      distLabel.textContent = '距离 (km) *';
+      distInput.placeholder = '公里';
+      distInput.step = '0.01';
+      if (activity && activity.distance_km != null) distInput.value = activity.distance_km;
     }
   }
   typeSel.addEventListener('change', updateSportSections);
@@ -273,7 +334,7 @@ function openAddActivity(activity = null) {
     el('div', { class: 'form-row' }, el('label', {}, '日期 *'), dateInput),
     el('div', { class: 'form-row' }, el('label', {}, '路线'), el('div', {}, routeSel, routeInput)),
     el('div', { class: 'form-row' }, el('label', {}, '类型 *'), typeSel),
-    el('div', { class: 'form-row' }, el('label', {}, '距离 (km) *'), distInput),
+    distRow,
     el('div', { class: 'form-row' }, el('label', {}, '爬升 (m)'), gainInput),
     el('div', { class: 'form-row' }, el('label', {}, '下降 (m)'), lossInput),
     el('div', { class: 'form-row' }, el('label', {}, '时长'), el('div', {}, durationInput, durationHint)),
@@ -293,7 +354,8 @@ function openAddActivity(activity = null) {
     runningSection,
     hikingSection,
     climbingSection,
-    cyclingSection
+    cyclingSection,
+    swimmingSection
   );
   updateSportSections();
 
@@ -336,7 +398,8 @@ function openAddActivity(activity = null) {
       date,
       route,
       type,
-      distance_km: distance,
+      // 游泳模式下 distance 是米；其他运动是公里
+      distance_km: sport === 'swimming' && distance > 0 ? Math.round((distance / 1000) * 10000) / 10000 : distance,
       elevation_gain_m: gainInput.value ? Number(gainInput.value) : undefined,
       elevation_loss_m: lossInput.value ? Number(lossInput.value) : undefined,
       duration_hours: durationHours,
@@ -353,6 +416,21 @@ function openAddActivity(activity = null) {
       if (paceInput.value.trim()) sportData.avg_pace = normalizePaceForSave(paceInput.value.trim());
       if (cadenceInput.value) sportData.cadence = Number(cadenceInput.value);
       if (strideInput.value) sportData.stride_length_m = Number(strideInput.value);
+    } else if (sport === 'swimming') {
+      if (distance > 0) sportData.distance_m = Math.round(distance);
+      if (swimStyleSel.value) sportData.swim_style = swimStyleSel.value;
+      if (waterTypeSel.value) sportData.water_type = waterTypeSel.value;
+      if (poolLengthSel.value) sportData.pool_length = Number(poolLengthSel.value);
+      if (swolfInput.value) sportData.swolf = Number(swolfInput.value);
+      // 计算 SWOLF 自动建议（仅泳池+有泳池长度时）
+      if (!swolfInput.value && waterTypeSel.value === 'pool' && poolLengthSel.value && distance > 0 && durationHours) {
+        const laps = Math.round(distance / Number(poolLengthSel.value));
+        const avgLapSec = (durationHours * 3600) / laps;
+        if (laps > 0 && Number.isFinite(avgLapSec)) {
+          // SWOLF = 划次 + 秒数，需要用户输入划次或粗略估算：这里只填时间部分
+          // 实际 SWOLF = strokes/lap + sec/lap；strokes/lap 用户没填就跳过自动建议
+        }
+      }
     } else if (sport === 'hiking') {
       if (endDateInput.value) sportData.end_date = endDateInput.value;
       if (maxAltInput.value) sportData.max_altitude_m = Number(maxAltInput.value);

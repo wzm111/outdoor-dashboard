@@ -9,6 +9,7 @@ function activitySport(type) {
   if (/hike|hiking|徒步|爬山|登山|trail/.test(t)) return 'hiking';
   if (/climb|攀岩|抱石|boulder/.test(t)) return 'climbing';
   if (/cycl|骑行|骑车/.test(t)) return 'cycling';
+  if (/swim|游泳|泳池|open_water/.test(t)) return 'swimming';
   return 'other';
 }
 
@@ -21,6 +22,7 @@ function sportLabel(sport) {
     hiking: '徒步/登山',
     climbing: '攀岩/抱石',
     cycling: '骑行',
+    swimming: '游泳',
     other: '其他',
   }[sport] || '其他';
 }
@@ -52,6 +54,31 @@ function cyclingTypeLabel(t) {
     cyclocross: 'CX',
     track: '场地',
   }[t] || t || '—';
+}
+
+function swimStyleLabel(s) {
+  return {
+    freestyle: '自由泳',
+    breaststroke: '蛙泳',
+    backstroke: '仰泳',
+    butterfly: '蝶泳',
+    mixed: '混合泳',
+  }[s] || s || '—';
+}
+
+function waterTypeLabel(w) {
+  return {
+    pool: '泳池',
+    open_water: '开放水域',
+  }[w] || w || '—';
+}
+
+/** 游泳配速（分钟/100m）→ "M:SS / 100m"。 */
+function formatSwimPace(minPer100m) {
+  if (minPer100m == null || isNaN(minPer100m) || minPer100m <= 0) return '—';
+  const m = Math.floor(minPer100m);
+  const s = Math.round((minPer100m - m) * 60);
+  return `${m}:${String(s).padStart(2, '0')} / 100m`;
 }
 
 function loadTypeLabel(t) {
@@ -339,6 +366,16 @@ function openActivityDetail(activity, gearMap) {
     if (speed != null) addStat('均速', num(speed, 1) + ' km/h');
     if (activity.max_speed_kmh) addStat('最高速', num(activity.max_speed_kmh, 1) + ' km/h');
     if (activity.power_avg_w) addStat('平均功率', num(activity.power_avg_w, 0) + ' W');
+  } else if (sport === 'swimming') {
+    if (activity.swim_style) addStat('泳姿', swimStyleLabel(activity.swim_style));
+    if (activity.water_type) addStat('水域', waterTypeLabel(activity.water_type));
+    if (activity.pool_length) addStat('泳池长度', activity.pool_length + ' m');
+    if (activity.distance_m != null) addStat('距离', activity.distance_m + ' m');
+    if (activity.swolf != null) addStat('SWOLF', activity.swolf);
+    const swimPace = activity.distance_m && activity.duration_hours
+      ? (activity.duration_hours * 60 * 100) / Number(activity.distance_m)
+      : null;
+    if (swimPace != null && swimPace > 0) addStat('平均配速', formatSwimPace(swimPace));
   }
 
   if (activity.avg_hr) addStat('平均心率', Math.round(activity.avg_hr) + ' bpm');
@@ -626,6 +663,13 @@ function buildActivityMarkdown(data) {
   if (data.avg_speed_kmh != null && data.avg_speed_kmh !== '') lines.push(`avg_speed_kmh: ${data.avg_speed_kmh}`);
   if (data.max_speed_kmh != null && data.max_speed_kmh !== '') lines.push(`max_speed_kmh: ${data.max_speed_kmh}`);
   if (data.power_avg_w != null && data.power_avg_w !== '') lines.push(`power_avg_w: ${data.power_avg_w}`);
+
+  // 游泳专项
+  if (data.swim_style) lines.push(`swim_style: "${data.swim_style}"`);
+  if (data.water_type) lines.push(`water_type: "${data.water_type}"`);
+  if (data.pool_length != null && data.pool_length !== '') lines.push(`pool_length: ${data.pool_length}`);
+  if (data.distance_m != null && data.distance_m !== '') lines.push(`distance_m: ${data.distance_m}`);
+  if (data.swolf != null && data.swolf !== '') lines.push(`swolf: ${data.swolf}`);
 
   const felt = data.felt;
   if (felt) lines.push(`felt: ${felt}`);

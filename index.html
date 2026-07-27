@@ -57,6 +57,7 @@
         <button type="button" class="tab" data-view="goals">目标</button>
         <button type="button" class="tab" data-view="training">训练负荷</button>
         <button type="button" class="tab" data-view="running">跑步</button>
+        <button type="button" class="tab" data-view="swimming">游泳</button>
         <button type="button" class="tab" data-view="recovery">恢复</button>
         <button type="button" class="tab" data-view="assistant">AI 助手</button>
       </nav>
@@ -327,6 +328,25 @@
           </div>
         </div>
       </section>
+      <section class="view" data-view="swimming" hidden>
+        <div class="skeleton-screen" hidden>
+          <div class="skeleton-header"><div class="skeleton-text skeleton-header-title"></div><div class="skeleton-text skeleton-text-sm skeleton-w-140"></div></div>
+          <div class="skeleton-report-grid">
+            <div class="skeleton-stat-card"><div class="skeleton-text"></div><div class="skeleton-text skeleton-text-lg"></div></div>
+            <div class="skeleton-stat-card"><div class="skeleton-text"></div><div class="skeleton-text skeleton-text-lg"></div></div>
+            <div class="skeleton-stat-card"><div class="skeleton-text"></div><div class="skeleton-text skeleton-text-lg"></div></div>
+            <div class="skeleton-stat-card"><div class="skeleton-text"></div><div class="skeleton-text skeleton-text-lg"></div></div>
+          </div>
+          <div class="skeleton-report-grid skeleton-mt-0">
+            <div class="skeleton-chart-card"><div class="skeleton-text"></div><div class="skeleton-chart skeleton"></div></div>
+          </div>
+          <div class="skeleton-report-card">
+            <div class="skeleton-text"></div>
+            <div class="skeleton-row skeleton"></div>
+            <div class="skeleton-row skeleton"></div>
+          </div>
+        </div>
+      </section>
       <section class="view" data-view="recovery" hidden>
         <div class="skeleton-screen" hidden>
           <div class="skeleton-header"><div class="skeleton-text skeleton-header-title"></div><div class="skeleton-text skeleton-text-sm skeleton-w-140"></div></div>
@@ -390,6 +410,7 @@
       <button type="button" class="bottom-more-item" data-view="goals">目标</button>
       <button type="button" class="bottom-more-item" data-view="training">训练负荷</button>
       <button type="button" class="bottom-more-item" data-view="running">跑步</button>
+      <button type="button" class="bottom-more-item" data-view="swimming">游泳</button>
       <button type="button" class="bottom-more-item" data-view="recovery">恢复</button>
       <button type="button" class="bottom-more-item" data-view="assistant">AI 助手</button>
     </div>
@@ -410,36 +431,37 @@
     <span>加载数据中…</span>
   </div>
 
-  <script src="version.js?v=v1.21.0-2026-07-24"></script>
-  <script src="utils.js?v=v1.21.0-2026-07-24"></script>
-  <script src="state.js?v=v1.21.0-2026-07-24"></script>
-  <script src="idb.js?v=v1.21.0-2026-07-24"></script>
-  <script src="api.js?v=v1.21.0-2026-07-24"></script>
-  <script src="ui-common.js?v=v1.21.0-2026-07-24"></script>
-  <script src="body-age.js?v=v1.21.0-2026-07-24"></script>
-  <script src="activity-core.js?v=v1.21.0-2026-07-24"></script>
-  <script src="activity-form.js?v=v1.21.0-2026-07-24"></script>
-  <script src="gear-utils.js?v=v1.21.0-2026-07-24"></script>
-  <script src="gpx-utils.js?v=v1.21.0-2026-07-24"></script>
-  <script src="chart-utils.js?v=v1.21.0-2026-07-24"></script>
-  <script src="training-utils.js?v=v1.21.0-2026-07-24"></script>
-  <script src="recovery-utils.js?v=v1.21.0-2026-07-24"></script>
-  <script src="body-quick-parse.js?v=v1.21.0-2026-07-24"></script>
-  <script src="assistant-utils.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-overview.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-activities.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-body.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-gear.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-routes.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-plans.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-routes-plans.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-reports.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-goals.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-training.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-running.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-recovery.js?v=v1.21.0-2026-07-24"></script>
-  <script src="view-assistant.js?v=v1.21.0-2026-07-24"></script>
-  <script src="recommend-core.js?v=v1.21.0-2026-07-24"></script>
-  <script src="app.js?v=v1.21.0-2026-07-24"></script>
+  <script src="version.js?v=v1.22.0-2026-07-27"></script>
+  <script src="utils.js?v=v1.22.0-2026-07-27"></script>
+  <script src="state.js?v=v1.22.0-2026-07-27"></script>
+  <script src="idb.js?v=v1.22.0-2026-07-27"></script>
+  <script src="api.js?v=v1.22.0-2026-07-27"></script>
+  <script src="ui-common.js?v=v1.22.0-2026-07-27"></script>
+  <script src="body-age.js?v=v1.22.0-2026-07-27"></script>
+  <script src="activity-core.js?v=v1.22.0-2026-07-27"></script>
+  <script src="activity-form.js?v=v1.22.0-2026-07-27"></script>
+  <script src="gear-utils.js?v=v1.22.0-2026-07-27"></script>
+  <script src="gpx-utils.js?v=v1.22.0-2026-07-27"></script>
+  <script src="chart-utils.js?v=v1.22.0-2026-07-27"></script>
+  <script src="training-utils.js?v=v1.22.0-2026-07-27"></script>
+  <script src="recovery-utils.js?v=v1.22.0-2026-07-27"></script>
+  <script src="body-quick-parse.js?v=v1.22.0-2026-07-27"></script>
+  <script src="assistant-utils.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-overview.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-activities.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-body.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-gear.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-routes.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-plans.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-routes-plans.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-reports.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-goals.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-training.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-running.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-swimming.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-recovery.js?v=v1.22.0-2026-07-27"></script>
+  <script src="view-assistant.js?v=v1.22.0-2026-07-27"></script>
+  <script src="recommend-core.js?v=v1.22.0-2026-07-27"></script>
+  <script src="app.js?v=v1.22.0-2026-07-27"></script>
 </body>
 </html>
