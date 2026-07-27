@@ -171,6 +171,7 @@ function renderAll() {
   renderReports();
   renderTraining();
   renderRunning();
+  renderSwimming();
   renderRecovery();
   renderAssistant();
   renderGoals();
@@ -196,8 +197,8 @@ async function clearCacheAndReload() {
 }
 
 const DEFAULT_VIEW = 'overview';
-const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes-plans', 'reports', 'training', 'running', 'recovery', 'assistant', 'goals'];
-const MORE_VIEWS = ['routes-plans', 'reports', 'training', 'running', 'recovery', 'assistant', 'goals'];
+const VALID_VIEWS = ['overview', 'activities', 'body', 'gear', 'routes-plans', 'reports', 'training', 'running', 'swimming', 'recovery', 'assistant', 'goals'];
+const MORE_VIEWS = ['routes-plans', 'reports', 'training', 'running', 'swimming', 'recovery', 'assistant', 'goals'];
 
 /** 从 URL hash 解析当前视图，非法或空时回退到总览。 */
 function viewFromHash() {

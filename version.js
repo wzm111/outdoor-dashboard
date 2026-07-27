@@ -1,5 +1,5 @@
 /* 应用版本号 */
 'use strict';
 
-window.__APP_VERSION = 'v1.22.2-2026-07-27';
+window.__APP_VERSION = 'v1.22.3-2026-07-27';
 console.log('%c[户外看板] version=' + window.__APP_VERSION, 'background:#4fb477;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold');
