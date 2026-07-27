@@ -98,7 +98,6 @@ async function loadAndRender(isRefresh = false) {
     $('#sync-status').textContent = isDelta ? '✓ 已增量同步' : '✓ 已同步';
   } catch (err) {
     console.log('🔴 [loadAndRender] 失败: ' + (err && err.message ? err.message : err));
-    console.log('🔴 [loadAndRender] 堆栈:', err && err.stack ? err.stack : '(无 stack)');
     hideSkeletons();
     // 失败时尝试用缓存快照（离线/PWA）
     if (cached) {

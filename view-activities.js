@@ -206,6 +206,23 @@ const SPORT_TABLE_COLUMNS = {
       ];
     },
   },
+  swimming: {
+    headers: ['日期', '泳池/水域', '泳姿', '水域', '距离', '时长', 'SWOLF', '感受', '装备'],
+    cells: (a) => {
+      const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
+      return [
+        td(fmtDate(a.date)),
+        td(routeText, 'col-location'),
+        td(swimStyleLabel(a.swim_style)),
+        td(waterTypeLabel(a.water_type)),
+        td(a.distance_m != null ? a.distance_m + ' m' : (a.distance_km != null ? num(a.distance_km, 2) + ' km' : '—'), 'num'),
+        td(fmtDuration(a.duration_hours), 'num'),
+        td(a.swolf != null ? String(a.swolf) : '—', 'num'),
+        td(feltStars(a.felt)),
+        td(gearCell(a), 'num'),
+      ];
+    },
+  },
 };
 
 // ---------- 活动表格 ----------
@@ -711,6 +728,7 @@ function renderActivities() {
     { key: 'hiking', label: '徒步' },
     { key: 'climbing', label: '攀岩' },
     { key: 'cycling', label: '骑行' },
+    { key: 'swimming', label: '游泳' },
   ];
   const activeTab = state.activitiesTab || 'all';
   const tabBar = el('div', { class: 'activity-tabs' });
@@ -725,9 +743,9 @@ function renderActivities() {
   view.appendChild(tabBar);
 
   if (activeTab === 'all') {
-    const groups = { running: [], hiking: [], climbing: [], cycling: [], other: [] };
+    const groups = { running: [], hiking: [], climbing: [], cycling: [], swimming: [], other: [] };
     for (const a of acts) groups[activitySport(a.type)].push(a);
-    for (const key of ['running', 'hiking', 'climbing', 'cycling', 'other']) {
+    for (const key of ['running', 'hiking', 'climbing', 'cycling', 'swimming', 'other']) {
       const list = groups[key];
       if (!list.length) continue;
       view.appendChild(el('div', { class: 'subsection-title' }, `${sportLabel(key)}（${list.length}）`));

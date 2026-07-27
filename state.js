@@ -73,6 +73,17 @@ function saveSyncMeta({ lastSyncAt, cachedAt } = {}) {
   } catch { /* 隐私模式可能禁用，忽略 */ }
 }
 
+/** 写入数据后调用：把 lastSyncAt 推到当前时间，避免 1 分钟内新写入被下次增量漏掉。 */
+function bumpLastSyncAt() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY + '-meta');
+    if (!raw) return;
+    const meta = JSON.parse(raw);
+    meta.lastSyncAt = new Date().toISOString();
+    localStorage.setItem(CACHE_KEY + '-meta', JSON.stringify(meta));
+  } catch { /* 忽略 */ }
+}
+
 function showAuthError(msg) {
   const e = $('#auth-error');
   e.textContent = msg;
@@ -215,6 +226,8 @@ async function mutateRequest({ url, options, label, optimistic, expectedUpdatedA
       const text = await res.text().catch(() => '');
       throw new Error(`${label}失败 (${res.status})${text ? ': ' + text.slice(0, 120) : ''}`);
     }
+    // 写后立刻把 lastSyncAt 推到当前时间，避免下次增量漏掉刚写入的记录
+    bumpLastSyncAt();
     return res.json().catch(() => ({ ok: true }));
   }
 
