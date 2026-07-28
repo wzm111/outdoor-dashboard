@@ -13,6 +13,11 @@ function renderRecovery() {
 
   const activities = state.data.activities || [];
   const bodyLogs = state.data.body_logs || [];
+
+  // 就绪度评分卡（v1.23.0）：不依赖恢复计划，只要有活动或身体日志就展示
+  const readiness = computeDailyReadiness(activities, bodyLogs, state.data.profile);
+  if (readiness) view.appendChild(renderReadinessDetailCard(readiness));
+
   const plan = computeRecoveryPlan(activities, bodyLogs);
 
   if (!plan) {
@@ -121,6 +126,40 @@ function renderRecovery() {
     );
   }
   view.appendChild(activityCard);
+}
+
+/** 就绪度详情卡：分数 + 档位 + ACWR + 建议 + 扣分因素明细（v1.23.0） */
+function renderReadinessDetailCard(r) {
+  const cls = readinessLevelClass(r.levelKey);
+  const card = el('div', { class: 'report-card' });
+  card.appendChild(el('h3', {}, '今日就绪度'));
+
+  const grid = el('div', { class: 'reports-grid three' });
+  grid.appendChild(reportStatCard('就绪度', r.score, '/ 100', cls));
+  grid.appendChild(reportStatCard('今日建议', r.label,
+    r.levelKey === 'rest' ? '以恢复为主' : r.levelKey === 'easy' ? '只做低强度' : r.levelKey === 'push' ? '窗口期' : '按计划', cls));
+  grid.appendChild(reportStatCard('ACWR', r.acwr.ratio ? r.acwr.ratio.toFixed(2) : '—', r.acwr.status,
+    r.acwr.risk === 'danger' ? 'stat-critical' : r.acwr.risk === 'warning' ? 'stat-warn' : 'stat-ok'));
+  card.appendChild(grid);
+
+  card.appendChild(el('div', { class: 'phase-desc' }, r.advice));
+
+  if (r.factorDetails.length) {
+    card.appendChild(el('div', { class: 'readiness-factors-title' }, '评分依据'));
+    card.appendChild(el('ul', { class: 'readiness-factors' },
+      ...r.factorDetails.map((f) => el('li', {},
+        el('span', { class: 'readiness-factor-name' }, `${f.factor} `),
+        el('span', { class: 'readiness-factor-penalty' }, `−${f.penalty}`),
+        ` ${f.detail}`))));
+  } else {
+    card.appendChild(el('div', { class: 'text-dim' }, '无扣分因素，各项状态良好'));
+  }
+
+  if (r.rhr && !r.rhr.sufficient) {
+    card.appendChild(el('div', { class: 'text-dim', style: 'margin-top:6px;' },
+      `💡 静息心率数据 ${r.rhr ? r.rhr.count : 0}/5 天——在身体日志记录 5 天以上晨起静息心率后，自动加入评估`));
+  }
+  return card;
 }
 
 /** 把 issue key 翻译成中文（与 view-activities.js 对齐） */

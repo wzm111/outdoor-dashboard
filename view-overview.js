@@ -194,6 +194,10 @@ function renderTodayCard() {
   const card = el('div', { class: 'report-card today-card' });
   card.appendChild(el('h3', {}, '今日'));
 
+  // 就绪度横幅（v1.23.0）：综合 ACWR/疲劳/静息心率/睡眠给出今日建议
+  const readiness = computeDailyReadiness(d.activities, d.body_logs, d.profile);
+  if (readiness) card.appendChild(renderReadinessBanner(readiness));
+
   const grid = el('div', { class: 'today-grid' });
 
   const bodySection = el('div', { class: 'today-section' });
@@ -247,4 +251,26 @@ function renderTodayCard() {
 
   card.appendChild(grid);
   return card;
+}
+
+/** 就绪度横幅：档位大字 + 分数 + 最多 3 条依据（v1.23.0） */
+function renderReadinessBanner(readiness) {
+  const cls = readinessLevelClass(readiness.levelKey);
+  const icons = { push: '🚀', normal: '✅', easy: '🚶', rest: '🛌' };
+  const banner = el('div', { class: `readiness-banner ${cls}` });
+
+  banner.appendChild(el('div', { class: 'readiness-main' },
+    el('span', { class: 'readiness-icon' }, icons[readiness.levelKey] || '✅'),
+    el('span', { class: 'readiness-label' }, `今日建议：${readiness.label}`),
+    el('span', { class: 'readiness-score' }, `就绪度 ${readiness.score}/100`)
+  ));
+
+  if (readiness.reasons.length) {
+    banner.appendChild(el('div', { class: 'readiness-sub' }, readiness.reasons.join(' · ')));
+  }
+  if (readiness.rhr && !readiness.rhr.sufficient) {
+    banner.appendChild(el('div', { class: 'readiness-sub readiness-hint' },
+      '💡 在身体日志记录晨起静息心率，可让建议更准'));
+  }
+  return banner;
 }

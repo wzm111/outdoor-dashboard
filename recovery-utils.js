@@ -38,10 +38,10 @@ function computeRecoveryIntensity(activity) {
   return { score: Math.round(score * 10) / 10, level, recoveryDays, distance, elevation, duration, type, felt, issues };
 }
 
-/** 根据最近身体日志调整恢复天数 */
+/** 根据最近身体日志调整恢复天数。返回值固定为 { days, avgFatigue, concerns }（无日志时也不退化为裸数字）。 */
 function adjustRecoveryDays(intensity, bodyLogs) {
   let days = intensity.recoveryDays;
-  if (!bodyLogs || !bodyLogs.length) return days;
+  if (!bodyLogs || !bodyLogs.length) return { days, avgFatigue: 0, concerns: [] };
 
   const recent = bodyLogs
     .filter((b) => b.date)
@@ -199,5 +199,164 @@ function computeRecoveryPlan(activities, bodyLogs, refDate = null) {
     progress,
     todayPlan,
     daysPlan,
+  };
+}
+
+/* ---------- 每日训练就绪度（v1.23.0） ---------- */
+
+/** 静息心率基线：最近 30 天数据，基线 = 除最新一条外的中位数。
+ *  count < 5 视为数据不足（sufficient=false），评分时跳过该因素。 */
+function computeRestingHrBaseline(bodyLogs, refDate = null) {
+  const today = safeParseDate(refDate) || new Date();
+  const start = new Date(today);
+  start.setDate(start.getDate() - 30);
+  const startStr = start.toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  const entries = (bodyLogs || [])
+    .filter((b) => b.date && Number(b.resting_hr) > 0)
+    .map((b) => ({ date: String(b.date).slice(0, 10), rhr: Number(b.resting_hr) }))
+    .filter((e) => e.date >= startStr && e.date <= todayStr)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const count = entries.length;
+  if (!count) return { baseline: null, latest: null, delta: null, count: 0, sufficient: false };
+
+  const latest = entries[count - 1].rhr;
+  const prior = entries.slice(0, -1).map((e) => e.rhr).sort((a, b) => a - b);
+  let baseline = null;
+  if (prior.length) {
+    const mid = Math.floor(prior.length / 2);
+    baseline = prior.length % 2 ? prior[mid] : (prior[mid - 1] + prior[mid]) / 2;
+  }
+  const delta = baseline != null ? Math.round((latest - baseline) * 10) / 10 : null;
+  return { baseline, latest, delta, count, sufficient: count >= 5 && baseline != null };
+}
+
+/** 连续训练天数：截至 refDate，往前数没有休息日的天数。今天还没训练则从前一天开始数。 */
+function computeConsecutiveTrainingDays(activities, refDate = null) {
+  const today = safeParseDate(refDate) || new Date();
+  const daySet = new Set();
+  for (const a of activities || []) {
+    const d = safeParseDate(a.date);
+    if (d) daySet.add(d.toISOString().slice(0, 10));
+  }
+  const fmt = (dt) => dt.toISOString().slice(0, 10);
+  const cursor = new Date(today);
+  if (!daySet.has(fmt(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let count = 0;
+  while (daySet.has(fmt(cursor))) {
+    count += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return count;
+}
+
+/** 就绪度档位 → 状态色 class（stat-ok / stat-warn / stat-critical） */
+function readinessLevelClass(levelKey) {
+  if (levelKey === 'rest') return 'stat-critical';
+  if (levelKey === 'easy') return 'stat-warn';
+  return 'stat-ok';
+}
+
+/** 每日训练就绪度：综合 ACWR / 疲劳评分 / 静息心率趋势 / 睡眠 / 膝盖 / 连续训练 / 恢复阶段，
+ *  输出 0-100 分与 休息/轻松/正常/可加量 四档建议。数据完全为空时返回 null。 */
+function computeDailyReadiness(activities, bodyLogs, profile, refDate = null) {
+  if (!((activities || []).length || (bodyLogs || []).length)) return null;
+
+  const weekly = computeWeeklyLoad(activities, 5);
+  const acwr = computeACWR(weekly);
+  const fatigue = computeFatigueScore(bodyLogs);
+  const rhr = computeRestingHrBaseline(bodyLogs, refDate);
+  const recoveryPlan = computeRecoveryPlan(activities, bodyLogs, refDate);
+
+  const today = (safeParseDate(refDate) || new Date()).toISOString().slice(0, 10);
+  const todayLog = (bodyLogs || []).find((b) => String(b.date) === today);
+
+  let score = 100;
+  const factorDetails = [];
+  const reasons = [];
+  const deduct = (factor, penalty, detail) => {
+    if (penalty <= 0) return;
+    score -= penalty;
+    factorDetails.push({ factor, penalty, detail });
+    reasons.push(detail);
+  };
+
+  // ACWR（周负荷突增）
+  if (acwr.risk === 'danger') {
+    deduct('ACWR', 40, `ACWR ${acwr.ratio.toFixed(2)} 危险区（高伤病风险）`);
+  } else if (acwr.risk === 'warning') {
+    deduct('ACWR', 20, `ACWR ${acwr.ratio.toFixed(2)} 警告区（负荷增长偏快）`);
+  }
+
+  // 疲劳评分（近 7 天疲劳/酸痛/睡眠均值）
+  if (fatigue.levelKey !== 'unknown') {
+    const p = Math.round(fatigue.score * 0.35);
+    if (p > 0) {
+      factorDetails.push({ factor: '疲劳评分', penalty: p, detail: `疲劳评分 ${Math.round(fatigue.score)}/100（${fatigue.status}）` });
+      if (fatigue.levelKey === 'moderate' || fatigue.levelKey === 'high') {
+        reasons.push(`近 7 天${fatigue.status}`);
+      }
+    }
+  }
+
+  // 静息心率较基线升高（恢复不足的经典信号）
+  if (rhr.sufficient && rhr.delta != null) {
+    if (rhr.delta >= 8) {
+      deduct('静息心率', 25, `静息心率 ${rhr.latest} 较基线 ${Math.round(rhr.baseline)} 高 ${Math.round(rhr.delta)} bpm`);
+    } else if (rhr.delta >= 5) {
+      deduct('静息心率', 15, `静息心率 ${rhr.latest} 较基线 ${Math.round(rhr.baseline)} 高 ${Math.round(rhr.delta)} bpm`);
+    }
+  }
+
+  // 昨晚睡眠（取自今天的身体日志）
+  if (todayLog && !isNaN(Number(todayLog.sleep_hours))) {
+    const s = Number(todayLog.sleep_hours);
+    if (s < 5) deduct('睡眠', 18, `昨晚睡眠 ${s}h，严重不足`);
+    else if (s < 6) deduct('睡眠', 10, `昨晚睡眠 ${s}h 偏少`);
+  }
+
+  // 膝盖状态
+  if (todayLog && todayLog.knee_status === 'poor') deduct('膝盖', 18, '膝盖状态差');
+  else if (todayLog && todayLog.knee_status === 'fair') deduct('膝盖', 8, '膝盖状态一般');
+
+  // 连续训练未安排休息日
+  const streak = computeConsecutiveTrainingDays(activities, refDate);
+  if (streak >= 4) deduct('连续训练', 12, `已连续训练 ${streak} 天，未安排休息日`);
+
+  score = Math.max(0, Math.round(score));
+
+  // 档位判定
+  let levelKey, label, advice;
+  if (score >= 80 && acwr.risk === 'low') {
+    levelKey = 'push'; label = '可加量';
+    advice = '状态良好且近期负荷偏低，可以安排一次高质量训练或适度加量';
+  } else if (score >= 65) {
+    levelKey = 'normal'; label = '正常训练';
+    advice = '身体状态支持正常训练，按计划进行即可';
+  } else if (score >= 40) {
+    levelKey = 'easy'; label = '轻松为主';
+    advice = '建议只做低强度有氧（Z1-Z2）或技术练习，避免高强度';
+  } else {
+    levelKey = 'rest'; label = '建议休息';
+    advice = '恢复不足，今天以休息、拉伸和充足睡眠为主';
+  }
+
+  // 急性恢复期封顶：高/极高强度活动后第 1-2 天，最高只能"轻松"
+  if (recoveryPlan && (recoveryPlan.intensity.level === '极高' || recoveryPlan.intensity.level === '高') &&
+      recoveryPlan.diffDays >= 1 && recoveryPlan.diffDays <= 2 &&
+      (levelKey === 'normal' || levelKey === 'push')) {
+    levelKey = 'easy'; label = '轻松为主';
+    advice = `${recoveryPlan.intensity.level}强度活动后第 ${recoveryPlan.diffDays} 天，仍在急性恢复期，只做低强度活动`;
+    reasons.unshift(advice);
+  }
+
+  if (!reasons.length) reasons.push('各项指标正常');
+
+  return {
+    score, levelKey, label, advice,
+    reasons: reasons.slice(0, 3),
+    factorDetails, acwr, fatigue, rhr, streak,
   };
 }
