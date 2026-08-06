@@ -627,6 +627,7 @@ function openActivityGear(activity, gearMap) {
       await fetchSaveActivity(state.apiUrl, state.token, payload);
       activity.gear_used = cleanSlugs.slice();
       activity._raw_markdown = rawRes.text;
+      await saveSnapshot();
       toast('已更新本次活动的装备', 'info');
       close();
       if (typeof renderActivities === 'function') renderActivities();

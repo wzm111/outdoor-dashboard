@@ -73,13 +73,14 @@ function saveSyncMeta({ lastSyncAt, cachedAt } = {}) {
   } catch { /* 隐私模式可能禁用，忽略 */ }
 }
 
-/** 写入数据后调用：把 lastSyncAt 推到当前时间，避免 1 分钟内新写入被下次增量漏掉。 */
+/** 写入数据后调用：把 lastSyncAt 推到当前时间前 5 秒，避免 1 分钟内新写入被下次增量漏掉，
+ *  同时容忍服务端与客户端时钟偏差，防止刚写入的记录被增量同步过滤掉。 */
 function bumpLastSyncAt() {
   try {
     const raw = localStorage.getItem(CACHE_KEY + '-meta');
     if (!raw) return;
     const meta = JSON.parse(raw);
-    meta.lastSyncAt = new Date().toISOString();
+    meta.lastSyncAt = new Date(Date.now() - 5000).toISOString();
     localStorage.setItem(CACHE_KEY + '-meta', JSON.stringify(meta));
   } catch { /* 忽略 */ }
 }
