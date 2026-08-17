@@ -321,13 +321,8 @@ function renderBody() {
     return;
   }
 
-  view.appendChild(lineChartCard('体重 (kg)', logs, 'weight_kg', '#5aa9e6'));
-  view.appendChild(lineChartCard('疲劳度 (1-10)', logs, 'fatigue', '#e0a458', 0, 10));
-  view.appendChild(lineChartCard('睡眠 (小时)', logs, 'sleep_hours', '#4fb477', 0, 12));
-  view.appendChild(lineChartCard('肌肉酸痛 (1-10)', logs, 'muscle_soreness', '#e06c75', 0, 10));
-  if (logs.some((b) => b.resting_hr != null)) {
-    view.appendChild(lineChartCard('晨起静息心率 (bpm)', logs, 'resting_hr', '#9b59b6'));
-  }
+  // 身体趋势图已隐藏：用户主要基于活动数据进行分析，身体日志更新频率低，
+  // 固定趋势图会造成“数据不更新”的误解。保留快速录入和表格供偶尔手动记录。
 
   // 最近记录表格：支持编辑/删除
   const recent = logs.slice().reverse();
