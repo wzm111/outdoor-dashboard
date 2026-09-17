@@ -133,20 +133,25 @@ const SPORT_TABLE_COLUMNS = {
     },
   },
   hiking: {
-    headers: ['日期', '路线', '距离', '爬升', '下降', '最高海拔', '路况', '负重', '天数', '感受', '装备'],
+    // 爬升/下降合并为一列、路况截断显示（悬停看全文），避免 12 列撑爆表格宽度
+    headers: ['日期', '路线', '距离', '爬升/下降', '最高海拔', '路况', '负重', '天数', '感受', '装备'],
     cells: (a) => {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
       const days = hikingDays(a.date, a.end_date);
       const daysText = days > 1 ? `${days} 天` : '1 天';
       const dateText = a.end_date ? `${fmtDate(a.date)} ~ ${fmtDate(a.end_date)}` : fmtDate(a.date);
+      const gainLoss = a.elevation_gain_m != null
+        ? `${num(a.elevation_gain_m, 0)} / ${a.elevation_loss_m != null ? num(a.elevation_loss_m, 0) : '—'} m`
+        : '—';
+      const condTd = el('td', { class: 'col-condition', title: a.trail_condition || '' });
+      condTd.textContent = a.trail_condition || '—';
       return [
         td(dateText),
         td(routeText, 'col-location'),
         td(num(a.distance_km, 1) + ' km', 'num'),
-        td(num(a.elevation_gain_m, 0) + ' m', 'num'),
-        td(num(a.elevation_loss_m, 0) + ' m', 'num'),
+        td(gainLoss, 'num'),
         td(a.max_altitude_m ? num(a.max_altitude_m, 0) + ' m' : '—', 'num'),
-        td(a.trail_condition || '—'),
+        condTd,
         td(loadTypeLabel(a.load_type)),
         td(daysText, 'num'),
         td(feltStars(a.felt)),
@@ -515,18 +520,28 @@ function openActivityGear(activity, gearMap) {
   ].filter(Boolean).join(' · ');
   if (meta) wrap.appendChild(el('div', { class: 'rel-summary' }, meta));
 
-  const editArea = el('div', {});
-  wrap.appendChild(editArea);
+  const listArea = el('div', {});
+  const addArea = el('div', {});
+  wrap.appendChild(listArea);
+  wrap.appendChild(el('div', { class: 'gear-chip-heading' }, '添加装备（点击勾选，可多选）'));
+  wrap.appendChild(addArea);
 
   let saveBtn = null;
   const origSlugs = gearSlugsOf(activity);
   const dirty = () => working.length !== origSlugs.length || working.some((s, i) => s !== origSlugs[i]);
 
-  function rebuild() {
-    editArea.innerHTML = '';
+  function updateSaveBtn() {
+    if (saveBtn) {
+      saveBtn.disabled = !dirty();
+      saveBtn.textContent = dirty() ? '保存' : '未修改';
+    }
+  }
+
+  function renderList() {
+    listArea.innerHTML = '';
 
     if (!working.length) {
-      editArea.appendChild(el('div', { class: 'empty' }, '本次活动未记录装备，可在下方添加'));
+      listArea.appendChild(el('div', { class: 'empty' }, '本次活动未记录装备，可在下方勾选添加'));
     } else {
       const list = el('div', { class: 'rel-list' });
       let totalWeight = 0, weighed = 0;
@@ -552,54 +567,65 @@ function openActivityGear(activity, gearMap) {
           actions.appendChild(detailBtn);
         }
         const rmBtn = el('button', { class: 'btn-sm btn-danger-outline' }, '✕ 移除');
-        rmBtn.addEventListener('click', () => { working = working.filter((s) => s !== slug); rebuild(); });
+        rmBtn.addEventListener('click', () => {
+          working = working.filter((s) => s !== slug);
+          renderList();
+          renderChips();
+        });
         actions.appendChild(rmBtn);
         item.appendChild(actions);
         list.appendChild(item);
       });
-      editArea.appendChild(list);
+      listArea.appendChild(list);
 
       const summaryText = weighed
         ? `本次共 ${working.length} 件，其中 ${weighed} 件有重量，合计约 ${num(totalWeight, 0)} g`
         : `本次共 ${working.length} 件`;
-      editArea.appendChild(el('div', { class: 'rel-summary rel-summary-total' }, summaryText));
+      listArea.appendChild(el('div', { class: 'rel-summary rel-summary-total' }, summaryText));
     }
 
-    const addable = (state.data.gear || [])
-      .filter((g) => g.condition !== 'retired' && !working.includes(g.slug));
-    const addRow = el('div', { class: 'gear-add-row' });
-    if (addable.length) {
-      const sel = el('select', { class: 'gear-select' });
-      sel.appendChild(el('option', { value: '' }, '+ 添加装备…'));
-      const byCat = new Map();
-      addable.forEach((g) => {
-        const c = g.category || '未分类';
-        if (!byCat.has(c)) byCat.set(c, []);
-        byCat.get(c).push(g);
-      });
-      Array.from(byCat.keys()).sort().forEach((cat) => {
-        const og = el('optgroup', { label: categoryLabel(cat) });
-        byCat.get(cat)
-          .sort((a, b) => String(a.name || a.slug).localeCompare(String(b.name || b.slug)))
-          .forEach((g) => og.appendChild(el('option', { value: g.slug },
-            (g.name || g.slug) + (g.weight_g != null ? ` · ${num(g.weight_g, 0)}g` : ''))));
-        sel.appendChild(og);
-      });
-      sel.addEventListener('change', () => {
-        const v = sel.value;
-        if (v && !working.includes(v)) { working = working.concat([v]); rebuild(); }
-      });
-      addRow.appendChild(sel);
-    } else {
-      addRow.appendChild(el('div', { class: 'rel-brief' }, '装备库中已无更多可添加的在用装备'));
-    }
-    editArea.appendChild(addRow);
-
-    if (saveBtn) {
-      saveBtn.disabled = !dirty();
-      saveBtn.textContent = dirty() ? '保存' : '未修改';
-    }
+    updateSaveBtn();
   }
+
+  // 装备多选 chips：按分类分组，点击切换勾选，无需逐个下拉添加
+  function renderChips() {
+    addArea.innerHTML = '';
+    const pool = (state.data.gear || []).filter((g) => g.condition !== 'retired');
+    if (!pool.length) {
+      addArea.appendChild(el('div', { class: 'rel-brief' }, '装备库为空，先到装备页添加装备'));
+      return;
+    }
+    const byCat = new Map();
+    pool.forEach((g) => {
+      const c = g.category || '未分类';
+      if (!byCat.has(c)) byCat.set(c, []);
+      byCat.get(c).push(g);
+    });
+    Array.from(byCat.keys()).sort().forEach((cat) => {
+      const group = el('div', { class: 'gear-chip-group' });
+      group.appendChild(el('div', { class: 'gear-chip-group-label' }, categoryLabel(cat)));
+      const grid = el('div', { class: 'gear-chip-grid' });
+      byCat.get(cat)
+        .sort((a, b) => String(a.name || a.slug).localeCompare(String(b.name || b.slug)))
+        .forEach((g) => {
+          const chip = el('button', {
+            type: 'button',
+            class: 'gear-chip' + (working.includes(g.slug) ? ' active' : ''),
+          }, (g.name || g.slug) + (g.weight_g != null ? ` · ${num(g.weight_g, 0)}g` : ''));
+          chip.addEventListener('click', () => {
+            const i = working.indexOf(g.slug);
+            if (i >= 0) { working.splice(i, 1); chip.classList.remove('active'); }
+            else { working.push(g.slug); chip.classList.add('active'); }
+            renderList();
+          });
+          grid.appendChild(chip);
+        });
+      group.appendChild(grid);
+      addArea.appendChild(group);
+    });
+  }
+
+  function rebuild() { renderList(); renderChips(); }
 
   saveBtn = el('button', { class: 'btn btn-primary', 'data-no-autoclose': '1' }, '保存');
   const closeBtn = el('button', { class: 'btn' }, '关闭');

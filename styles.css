@@ -383,6 +383,8 @@ tbody tr { transition: background-color var(--transition); }
 tbody tr:hover { background: var(--bg-elev); }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .col-location { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+/* 徒步表路况列：截断显示，悬停看全文，避免长文本撑爆整表 */
+.col-condition { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 
 /* 分组小标题 */
 .subsection-title {
@@ -976,6 +978,47 @@ textarea { resize: vertical; }
 .gear-edit-row .gear-edit-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .gear-add-row { margin-top: 12px; }
 .gear-add-row .gear-select { width: 100%; }
+
+/* 活动装备多选 chips：按分类分组，点击勾选/取消 */
+.gear-chip-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+.gear-chip-group { margin-bottom: 12px; }
+.gear-chip-group-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.gear-chip-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.gear-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.10);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #bbf7d0;
+  cursor: pointer;
+  transition: background-color var(--transition), border-color var(--transition), transform var(--transition);
+}
+.gear-chip:hover {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.45);
+  transform: translateY(-1px);
+}
+.gear-chip.active {
+  background: rgba(34, 197, 94, 0.30);
+  border-color: rgba(34, 197, 94, 0.65);
+  color: #dcfce7;
+}
 
 /* ---------- 装备推荐弹窗 ---------- */
 .recommend-form {
