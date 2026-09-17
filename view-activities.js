@@ -141,12 +141,11 @@ const SPORT_TABLE_COLUMNS = {
     },
   },
   hiking: {
-    // 爬升/下降合并一列、单位入表头、日期去年份、路况截断，控制 11 列总宽
-    headers: ['日期', '路线', '距离', '爬升/下降 m', '最高海拔 m', '路况', '负重', '天数', '感受', '装备'],
+    // 爬升/下降合并一列、单位入表头、日期去年份、路况截断，控制总宽；
+    // 天数信息日期列已能表达（跨天显示起~止），此处展示实际用时
+    headers: ['日期', '路线', '距离', '爬升/下降 m', '最高海拔 m', '路况', '负重', '时长', '感受', '装备'],
     cells: (a) => {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
-      const days = hikingDays(a.date, a.end_date);
-      const daysText = days > 1 ? `${days} 天` : '1 天';
       const dateText = a.end_date
         ? `${fmtDateShort(a.date)} ~ ${fmtDateShort(a.end_date)}`
         : fmtDateShort(a.date);
@@ -163,7 +162,7 @@ const SPORT_TABLE_COLUMNS = {
         td(a.max_altitude_m ? num(a.max_altitude_m, 0) : '—', 'num'),
         condTd,
         td(loadTypeLabel(a.load_type)),
-        td(daysText, 'num'),
+        td(fmtDuration(a.duration_hours), 'num'),
         td(feltStars(a.felt)),
         td(gearCell(a), 'num'),
       ];
