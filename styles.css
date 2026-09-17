@@ -376,15 +376,15 @@ button, input, select, textarea, [role="button"] { transition: border-color var(
 .table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .table-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 table { width: 100%; min-width: max-content; border-collapse: collapse; font-size: 14px; }
-th, td { padding: 10px 14px; text-align: left; white-space: nowrap; }
+th, td { padding: 8px 10px; text-align: left; white-space: nowrap; }
 th { background: var(--bg-elev); color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
 tr { border-top: 1px solid var(--border-subtle); }
 tbody tr { transition: background-color var(--transition); }
 tbody tr:hover { background: var(--bg-elev); }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
-.col-location { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.col-location { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 /* 徒步表路况列：截断显示，悬停看全文，避免长文本撑爆整表 */
-.col-condition { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.col-condition { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 
 /* 分组小标题 */
 .subsection-title {
@@ -1003,22 +1003,25 @@ textarea { resize: vertical; }
   font-size: 12px;
   padding: 4px 12px;
   border-radius: 999px;
-  background: rgba(34, 197, 94, 0.10);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  color: #bbf7d0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
   cursor: pointer;
-  transition: background-color var(--transition), border-color var(--transition), transform var(--transition);
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition), transform var(--transition);
 }
 .gear-chip:hover {
-  background: rgba(34, 197, 94, 0.18);
   border-color: rgba(34, 197, 94, 0.45);
+  color: var(--text);
   transform: translateY(-1px);
 }
+/* 选中态：实心绿 + 深色字 + 对勾，与未选中（灰底灰字）形成强反差 */
 .gear-chip.active {
-  background: rgba(34, 197, 94, 0.30);
-  border-color: rgba(34, 197, 94, 0.65);
-  color: #dcfce7;
+  background: #22c55e;
+  border-color: #22c55e;
+  color: #052e16;
+  font-weight: 600;
 }
+.gear-chip.active::before { content: '✓ '; }
 
 /* ---------- 装备推荐弹窗 ---------- */
 .recommend-form {

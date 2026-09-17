@@ -97,6 +97,14 @@ function hikingDays(start, end) {
   return days > 1 ? days : 1;
 }
 
+/** 表格用短日期：当年显示 MM-DD，跨年保留完整 YYYY-MM-DD，为窄表省宽度。 */
+function fmtDateShort(d) {
+  const s = fmtDate(d);
+  if (!d || s === '—') return s;
+  const y = String(new Date().getFullYear());
+  return s.startsWith(y + '-') ? s.slice(5) : s;
+}
+
 // ---------- 表格单元格辅助 ----------
 
 function td(content, cls) {
@@ -120,7 +128,7 @@ const SPORT_TABLE_COLUMNS = {
     cells: (a) => {
       const routeText = a.notes || a.route || '—';
       return [
-        td(fmtDate(a.date)),
+        td(fmtDateShort(a.date)),
         td(routeText, 'col-location'),
         td(num(a.distance_km, 2) + ' km', 'num'),
         td(fmtDuration(a.duration_hours), 'num'),
@@ -133,15 +141,17 @@ const SPORT_TABLE_COLUMNS = {
     },
   },
   hiking: {
-    // 爬升/下降合并为一列、路况截断显示（悬停看全文），避免 12 列撑爆表格宽度
-    headers: ['日期', '路线', '距离', '爬升/下降', '最高海拔', '路况', '负重', '天数', '感受', '装备'],
+    // 爬升/下降合并一列、单位入表头、日期去年份、路况截断，控制 11 列总宽
+    headers: ['日期', '路线', '距离', '爬升/下降 m', '最高海拔 m', '路况', '负重', '天数', '感受', '装备'],
     cells: (a) => {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
       const days = hikingDays(a.date, a.end_date);
       const daysText = days > 1 ? `${days} 天` : '1 天';
-      const dateText = a.end_date ? `${fmtDate(a.date)} ~ ${fmtDate(a.end_date)}` : fmtDate(a.date);
+      const dateText = a.end_date
+        ? `${fmtDateShort(a.date)} ~ ${fmtDateShort(a.end_date)}`
+        : fmtDateShort(a.date);
       const gainLoss = a.elevation_gain_m != null
-        ? `${num(a.elevation_gain_m, 0)} / ${a.elevation_loss_m != null ? num(a.elevation_loss_m, 0) : '—'} m`
+        ? `${num(a.elevation_gain_m, 0)} / ${a.elevation_loss_m != null ? num(a.elevation_loss_m, 0) : '—'}`
         : '—';
       const condTd = el('td', { class: 'col-condition', title: a.trail_condition || '' });
       condTd.textContent = a.trail_condition || '—';
@@ -150,7 +160,7 @@ const SPORT_TABLE_COLUMNS = {
         td(routeText, 'col-location'),
         td(num(a.distance_km, 1) + ' km', 'num'),
         td(gainLoss, 'num'),
-        td(a.max_altitude_m ? num(a.max_altitude_m, 0) + ' m' : '—', 'num'),
+        td(a.max_altitude_m ? num(a.max_altitude_m, 0) : '—', 'num'),
         condTd,
         td(loadTypeLabel(a.load_type)),
         td(daysText, 'num'),
@@ -164,7 +174,7 @@ const SPORT_TABLE_COLUMNS = {
     cells: (a) => {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
       return [
-        td(fmtDate(a.date)),
+        td(fmtDateShort(a.date)),
         td(routeText, 'col-location'),
         td(disciplineLabel(a.discipline)),
         td(a.grade || '—', 'num'),
@@ -182,7 +192,7 @@ const SPORT_TABLE_COLUMNS = {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
       const speed = a.avg_speed_kmh != null ? a.avg_speed_kmh : avgSpeedKmh(a.distance_km, a.duration_hours);
       return [
-        td(fmtDate(a.date)),
+        td(fmtDateShort(a.date)),
         td(routeText, 'col-location'),
         td(cyclingTypeLabel(a.cycling_type)),
         td(num(a.distance_km, 1) + ' km', 'num'),
@@ -200,7 +210,7 @@ const SPORT_TABLE_COLUMNS = {
     cells: (a) => {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
       return [
-        td(fmtDate(a.date)),
+        td(fmtDateShort(a.date)),
         td(routeText, 'col-location'),
         td(a.type || '—'),
         td(num(a.distance_km, 1) + ' km', 'num'),
@@ -216,7 +226,7 @@ const SPORT_TABLE_COLUMNS = {
     cells: (a) => {
       const routeText = (a.route || '—') + (a.sequence > 0 ? ` #${Number(a.sequence) + 1}` : '');
       return [
-        td(fmtDate(a.date)),
+        td(fmtDateShort(a.date)),
         td(routeText, 'col-location'),
         td(swimStyleLabel(a.swim_style)),
         td(waterTypeLabel(a.water_type)),
