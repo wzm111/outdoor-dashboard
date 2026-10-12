@@ -1,0 +1,2 @@
+function e(e,t=``,n=new Set){let r=t.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/),i=r?.[1].match(/^[^ \t].*(?:\r?\n[ \t]+.*)*/gm)||[],a=new Set([`id`,`slug`,`_raw_markdown`,`_updated_at`,`_path`]),o=i.filter(t=>{let r=t.match(/^([^:]+):/)?.[1],i=r?.startsWith(`"`)?JSON.parse(r):r;return i&&!n.has(i)&&!(i in e)&&!a.has(i)}),s=Object.entries(e).filter(([e,t])=>!a.has(e)&&t!==void 0).map(([e,t])=>`${JSON.stringify(e)}: ${JSON.stringify(t)}`);return[`---`,...o,...s,`---`,``].join(`
+`)+(r?t.slice(r[0].length):``)}export{e as t};

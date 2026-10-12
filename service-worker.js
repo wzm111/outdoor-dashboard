@@ -1,4 +1,4 @@
-const CACHE='outdoor-dashboard-v1.26.0-2026-10-12-vue';const SHELL=["./","./index.html","./manifest.json","./icon-192.png","./icon-512.png","./assets/index-Yya9HSNH.js","./assets/ActivityEditor-CeOD0QUc.js","./assets/index--pUbiyF3.css"];
+const CACHE='outdoor-dashboard-v1.27.0-2026-10-12-vue';const SHELL=["./","./index.html","./manifest.json","./icon-192.png","./icon-512.png","./assets/index-B8A3PCPU.js","./assets/ActivityEditor-DJ-V0Llf.js","./assets/AiSettings-PBNqmzg6.js","./assets/AppDialog-CdjK6P8m.js","./assets/BodyEditor-Dr_Py9-F.js","./assets/BodyLog-DpUn8X8o.js","./assets/body-model-BQexOyhF.js","./assets/record-markdown-TNO7Rmpr.js","./assets/index-Bc9IvRXu.css"];
    self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL))));
    self.addEventListener('message',e=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting();});
    self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('outdoor-dashboard-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
